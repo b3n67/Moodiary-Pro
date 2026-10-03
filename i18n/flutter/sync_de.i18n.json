@@ -55,7 +55,7 @@
   "autoSyncSubtitle": "Nach einer Änderung hochschieben und Änderungen anderer Geräte im Takt abholen",
   "pollInterval": "Abfrageintervall",
   "pollIntervalSubtitle": "Wie oft Änderungen anderer Geräte im Hintergrund abgeholt werden",
-  "pollIntervalNote": "Wie oft eine vollständige Zwei-Wege-Synchronisierung im Hintergrund läuft. Ein kürzeres Intervall nimmt Änderungen anderer Geräte sooner auf, aber jede Abfrage nimmt die Remote-Sperre, liest das Manifest und macht Netzwerkanfragen — zu kurz, und du zahlst dafür mit Traffic und Akku und kannst auf WebDAV-/S3-Ratenlimits oder ein temporäres Verbot stoßen. 30 Sekunden ist eine vernünftige Untergrenze.",
+  "pollIntervalNote": "Wie oft eine vollständige Zwei-Wege-Synchronisierung im Hintergrund läuft. Ein kürzeres Intervall nimmt Änderungen anderer Geräte früher auf, aber jede Abfrage nimmt die Remote-Sperre, liest das Manifest und macht Netzwerkanfragen — zu kurz, und du zahlst dafür mit Traffic und Akku und kannst auf WebDAV-/S3-Ratenlimits oder ein temporäres Verbot stoßen. 30 Sekunden ist eine vernünftige Untergrenze.",
   "networkSection": "Netzwerk",
   "concurrency": "Gleichzeitige Anfragen",
   "concurrencySubtitle": "Obergrenze für parallele Netzwerkanfragen beim Synchronisieren; auf schwacher Verbindung oder gegen einen ratelimitierten Server senken",

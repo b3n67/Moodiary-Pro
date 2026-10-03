@@ -323,7 +323,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   SyncErrorKind _kind(int? status) => switch (status) {
         401 || 403 => .auth,
         404 => .notFound,
-        >= 500 => .server,
+        final int s when s >= 500 => .server,
         _ => .http,
       };
 

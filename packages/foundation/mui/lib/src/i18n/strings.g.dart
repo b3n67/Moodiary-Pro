@@ -13,6 +13,7 @@ import 'package:slang/generated.dart';
 import 'package:slang_flutter/slang_flutter.dart';
 export 'package:slang_flutter/slang_flutter.dart';
 
+import 'strings_de.g.dart' as l_de;
 import 'strings_en.g.dart' as l_en;
 part 'strings_zh.g.dart';
 
@@ -24,6 +25,7 @@ part 'strings_zh.g.dart';
 /// - if (LocaleSettings.currentLocale == MuiLocale.zh) // locale check
 enum MuiLocale with BaseAppLocale<MuiLocale, MuiLocalizationsData> {
 	zh(languageCode: 'zh'),
+	de(languageCode: 'de'),
 	en(languageCode: 'en');
 
 	const MuiLocale({
@@ -58,6 +60,12 @@ enum MuiLocale with BaseAppLocale<MuiLocale, MuiLocalizationsData> {
 		switch (this) {
 			case MuiLocale.zh:
 				return MuiLocalizationsDataZh(
+					overrides: overrides,
+					cardinalResolver: cardinalResolver,
+					ordinalResolver: ordinalResolver,
+				);
+			case MuiLocale.de:
+				return l_de.MuiLocalizationsDataDe(
 					overrides: overrides,
 					cardinalResolver: cardinalResolver,
 					ordinalResolver: ordinalResolver,

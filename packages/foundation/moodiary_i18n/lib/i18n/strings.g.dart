@@ -13,6 +13,7 @@ import 'package:slang/generated.dart';
 import 'package:slang_flutter/slang_flutter.dart';
 export 'package:slang_flutter/slang_flutter.dart';
 
+import 'strings_de.g.dart' deferred as l_de;
 import 'strings_en.g.dart' deferred as l_en;
 part 'strings_zh.g.dart';
 
@@ -24,6 +25,7 @@ part 'strings_zh.g.dart';
 /// - if (LocaleSettings.currentLocale == AppLocale.zh) // locale check
 enum AppLocale with BaseAppLocale<AppLocale, Translations> {
 	zh(languageCode: 'zh'),
+	de(languageCode: 'de'),
 	en(languageCode: 'en');
 
 	const AppLocale({
@@ -49,6 +51,13 @@ enum AppLocale with BaseAppLocale<AppLocale, Translations> {
 					cardinalResolver: cardinalResolver,
 					ordinalResolver: ordinalResolver,
 				);
+			case AppLocale.de:
+				await l_de.loadLibrary();
+				return l_de.TranslationsDe(
+					overrides: overrides,
+					cardinalResolver: cardinalResolver,
+					ordinalResolver: ordinalResolver,
+				);
 			case AppLocale.en:
 				await l_en.loadLibrary();
 				return l_en.TranslationsEn(
@@ -68,6 +77,12 @@ enum AppLocale with BaseAppLocale<AppLocale, Translations> {
 		switch (this) {
 			case AppLocale.zh:
 				return TranslationsZh(
+					overrides: overrides,
+					cardinalResolver: cardinalResolver,
+					ordinalResolver: ordinalResolver,
+				);
+			case AppLocale.de:
+				return l_de.TranslationsDe(
 					overrides: overrides,
 					cardinalResolver: cardinalResolver,
 					ordinalResolver: ordinalResolver,

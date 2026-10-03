@@ -194,9 +194,9 @@ class _RemoteSectionState extends ConsumerState<_RemoteSection> {
           trailing: const Icon(LucideIcons.chevronRight),
           onTap: () async {
             final ok = switch (current) {
-              .webdav => await WebDavFormSheet.show(context),
-              .onedrive => await OneDriveFormSheet.show(context),
-              .s3 => await S3FormSheet.show(context),
+              SyncProviderType.webdav => await WebDavFormSheet.show(context),
+              SyncProviderType.onedrive => await OneDriveFormSheet.show(context),
+              SyncProviderType.s3 => await S3FormSheet.show(context),
             };
             if (ok != true || !mounted) return;
             getIt<SyncRunner>().resetHealth();

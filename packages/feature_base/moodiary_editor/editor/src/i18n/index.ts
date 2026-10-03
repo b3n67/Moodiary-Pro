@@ -15,5 +15,10 @@ export const i18n = createI18n({
 })
 
 export function setLocale(locale?: string): void {
-  i18n.global.locale.value = locale?.toLowerCase().startsWith('en') ? 'en' : 'zh'
+  const tag = locale?.toLowerCase() ?? '';
+  i18n.global.locale.value = tag.startsWith('de')
+    ? 'de'
+    : tag.startsWith('en')
+      ? 'en'
+      : 'zh';
 }

@@ -72,6 +72,7 @@ class _Translations$app$en extends Translations$app$zh {
 	@override String get languageSystem => 'Follow System';
 	@override String get languageSimplifiedChinese => '简体中文';
 	@override String get languageEnglish => 'English';
+	@override String get languageGerman => 'Deutsch';
 	@override String get settingsTitle => 'Settings';
 	@override String get sectionData => 'Data';
 	@override String get recycle => 'Recycle bin';
@@ -1374,6 +1375,26 @@ class _Translations$sync$en extends Translations$sync$zh {
 	@override String remoteCount({required Object count}) => 'remote ${count}';
 	@override String get logHealth => 'Connection';
 	@override String lastSuccess({required Object time}) => 'last success ${time}';
+	@override String get backupSyncOnedrive => 'Microsoft OneDrive';
+	@override String get onedriveOptionClientId => 'Client ID (Azure app)';
+	@override String get onedriveOptionSignedIn => 'Signed in';
+	@override String get onedriveOptionSignedOut => 'Signed out';
+	@override String get onedriveSignIn => 'Sign in with Microsoft';
+	@override String get onedriveSignInSubtitle => 'Sign in in a browser window and approve access';
+	@override String get onedriveSignOut => 'Sign out';
+	@override String get onedriveSignOutConfirmTitle => 'Sign out of OneDrive?';
+	@override String get onedriveSignOutConfirmMessage => 'Syncing with OneDrive stops. Diaries on this device are untouched.';
+	@override String get onedriveClientIdHint => 'The Application (client) ID of your Azure app registration';
+	@override String get onedriveClientIdRequired => 'The client ID is required';
+	@override String onedriveAuthFailed({required Object error}) => 'Microsoft sign-in failed: ${error}';
+	@override String get onedriveTokenExpired => 'The sign-in has expired, sign in again';
+	@override String get onedriveSetupGuideTitle => 'Set up OneDrive';
+	@override String get onedriveSetupGuideMessage => 'Register a free app in the Azure portal (App registrations → New registration) with "Accounts in any organization and personal Microsoft accounts" and redirect URI http://localhost. Then add the API permission "Microsoft Graph → Files.ReadWrite.All" and enter the client ID here.';
+	@override String get onedriveSetupGuideOpen => 'Open Azure portal';
+	@override String get onedriveNotSignedIn => 'Sign in with Microsoft first';
+	@override String get onedriveDriveError => 'The OneDrive could not be read';
+	@override String get onedriveUploadConflict => 'The file already exists on OneDrive';
+	@override String get errOnedriveConfig => 'Finish the OneDrive configuration first';
 }
 
 // Path: ui

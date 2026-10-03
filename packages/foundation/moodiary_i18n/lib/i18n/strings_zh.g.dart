@@ -109,6 +109,9 @@ class Translations$app$zh {
 	/// zh: 'English'
 	String get languageEnglish => 'English';
 
+	/// zh: 'Deutsch'
+	String get languageGerman => 'Deutsch';
+
 	/// zh: '设置'
 	String get settingsTitle => '设置';
 
@@ -3806,6 +3809,66 @@ class Translations$sync$zh {
 
 	/// zh: '上次成功 {time}'
 	String lastSuccess({required Object time}) => '上次成功 ${time}';
+
+	/// zh: 'Microsoft OneDrive'
+	String get backupSyncOnedrive => 'Microsoft OneDrive';
+
+	/// zh: '客户端 ID（Azure 应用）'
+	String get onedriveOptionClientId => '客户端 ID（Azure 应用）';
+
+	/// zh: '已登录'
+	String get onedriveOptionSignedIn => '已登录';
+
+	/// zh: '已退出'
+	String get onedriveOptionSignedOut => '已退出';
+
+	/// zh: '使用 Microsoft 登录'
+	String get onedriveSignIn => '使用 Microsoft 登录';
+
+	/// zh: '在浏览器窗口中登录并授权访问'
+	String get onedriveSignInSubtitle => '在浏览器窗口中登录并授权访问';
+
+	/// zh: '退出登录'
+	String get onedriveSignOut => '退出登录';
+
+	/// zh: '退出 OneDrive？'
+	String get onedriveSignOutConfirmTitle => '退出 OneDrive？';
+
+	/// zh: '与 OneDrive 的同步将停止。本设备上的日记不受影响。'
+	String get onedriveSignOutConfirmMessage => '与 OneDrive 的同步将停止。本设备上的日记不受影响。';
+
+	/// zh: 'Azure 应用注册的应用程序（客户端）ID'
+	String get onedriveClientIdHint => 'Azure 应用注册的应用程序（客户端）ID';
+
+	/// zh: '需要客户端 ID'
+	String get onedriveClientIdRequired => '需要客户端 ID';
+
+	/// zh: 'Microsoft 登录失败：{error}'
+	String onedriveAuthFailed({required Object error}) => 'Microsoft 登录失败：${error}';
+
+	/// zh: '登录已过期，请重新登录'
+	String get onedriveTokenExpired => '登录已过期，请重新登录';
+
+	/// zh: '设置 OneDrive'
+	String get onedriveSetupGuideTitle => '设置 OneDrive';
+
+	/// zh: '在 Azure 门户（免费）注册一个应用（应用注册 → 新注册），账户类型选“任何组织和个人 Microsoft 账户”，重定向 URI 填 http://localhost。然后添加 API 权限“Microsoft Graph → Files.ReadWrite.All”，并把客户端 ID 填到这里。'
+	String get onedriveSetupGuideMessage => '在 Azure 门户（免费）注册一个应用（应用注册 → 新注册），账户类型选“任何组织和个人 Microsoft 账户”，重定向 URI 填 http://localhost。然后添加 API 权限“Microsoft Graph → Files.ReadWrite.All”，并把客户端 ID 填到这里。';
+
+	/// zh: '打开 Azure 门户'
+	String get onedriveSetupGuideOpen => '打开 Azure 门户';
+
+	/// zh: '请先使用 Microsoft 登录'
+	String get onedriveNotSignedIn => '请先使用 Microsoft 登录';
+
+	/// zh: '无法读取 OneDrive'
+	String get onedriveDriveError => '无法读取 OneDrive';
+
+	/// zh: '该文件已存在于 OneDrive'
+	String get onedriveUploadConflict => '该文件已存在于 OneDrive';
+
+	/// zh: '请先完成 OneDrive 配置'
+	String get errOnedriveConfig => '请先完成 OneDrive 配置';
 }
 
 // Path: ui
