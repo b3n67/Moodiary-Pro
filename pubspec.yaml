@@ -1,0 +1,48 @@
+name: moodiary_workspace
+description: "Workspace and Melos coordinator for the Moodiary monorepo. The app lives in mobile/."
+publish_to: "none"
+
+environment:
+  sdk: ">=3.13.0"
+
+workspace:
+  - mobile
+  - packages/*/*
+
+melos:
+  categories:
+    foundation:
+      - packages/foundation/*
+    core:
+      - packages/core/*
+    feature_base:
+      - packages/feature_base/*
+    feature:
+      - packages/feature/*
+  scripts:
+    analyze:
+      run: fvm dart tool/task.dart analyze
+      description: 分层检查 + flutter analyze
+    test:
+      run: fvm dart tool/task.dart test
+      description: 测试受影响的包（--diff=<ref> 选基准，--all 全仓）
+    test-mobile:
+      run: fvm dart tool/task.dart test-mobile
+      description: 只跑 mobile/ 的测试
+    gen:
+      run: fvm dart tool/task.dart gen
+      description: 重新生成 Rust 绑定 + slang 文案
+    gen-rust:
+      run: fvm dart tool/task.dart gen-rust
+      description: 重新生成 Rust FFI 绑定
+
+dev_dependencies:
+  melos: 8.6.0
+  flutter_test:
+    sdk: flutter
+  moodiary_data: 0.0.1
+  moodiary_assistant: 0.0.1
+
+dependency_overrides:
+  cli_util: 0.5.2
+

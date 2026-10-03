@@ -1,0 +1,24 @@
+{
+  "title": "Medien",
+  "typeImage": "Bild",
+  "deleteUseLessFile": "Unnötige Datei löschen",
+  "empty": "Noch keine Medien",
+  "cleanupScanning": "Unbenutzte Dateien werden gescannt",
+  "cleanupEmpty": "Keine unbenutzten Dateien gefunden",
+  "cleanupConfirmTitle": "Unbenutzte Dateien bereinigen",
+  "cleanupConfirmMessage": "{count} Dateien gefunden, die von keinem Tagebuch referenziert werden ({size}). Bereinigen? Dies kann nicht rückgängig gemacht werden.",
+  "cleanupDone": "{count} Dateien bereinigt",
+  "rename": "Umbenennen",
+  "imageCount(plural, param=count)": {
+    "one": "{count} Foto",
+    "other": "{count} Fotos"
+  },
+  "audioCount(plural, param=count)": {
+    "one": "{count} Audio",
+    "other": "{count} Audios"
+  },
+  "videoCount(plural, param=count)": {
+    "one": "{count} Video",
+    "other": "{count} Videos"
+  }
+}

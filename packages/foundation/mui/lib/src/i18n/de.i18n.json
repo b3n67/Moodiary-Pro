@@ -1,0 +1,13 @@
+{
+  "ok": "OK",
+  "cancel": "Abbrechen",
+  "back": "Zurück",
+  "colorPickerTitle": "Farbe wählen",
+  "toastLoading": "Wird geladen",
+  "toastSuccess": "Erfolg",
+  "toastError": "Fehler",
+  "configured": "Konfiguriert",
+  "notConfigured": "Nicht konfiguriert",
+  "input": "Eingeben",
+  "save": "Speichern"
+}

@@ -1,0 +1,68 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:moodiary_utils/moodiary_utils.dart';
+
+void main() {
+  test('lru cache test', () {
+    final lru = LRUCache<int, int>(maxSize: 3);
+    lru.put(1, 1);
+    lru.put(2, 2);
+    lru.put(3, 3);
+    expect(lru.size(), 3);
+    lru.put(4, 4);
+    expect(lru.size(), 3);
+    expect(lru.get(1), null);
+    expect(lru.get(2), 2);
+    lru.put(5, 5);
+    expect(lru.size(), 3);
+    expect(lru.get(3), null);
+    expect(lru.get(4), 4);
+    expect(lru.get(5), 5);
+  });
+
+  test('uuidV7 前 48 位是毫秒时间戳（extractDateFromUUID 依赖此布局）', () {
+    final before = DateTime.now().millisecondsSinceEpoch;
+    final id = uuidV7();
+    final after = DateTime.now().millisecondsSinceEpoch;
+    expect(
+      id,
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
+    final ms = int.parse(id.replaceAll('-', '').substring(0, 12), radix: 16);
+    expect(ms, inInclusiveRange(before, after));
+  });
+
+  group('TimeFormat', () {
+    test('isoDate 补零且不随语言变化', () {
+      expect(TimeFormat.isoDate(DateTime(2026, 7, 4)), '2026-07-04');
+      expect(TimeFormat.isoDate(DateTime(2026, 11, 23)), '2026-11-23');
+    });
+
+    test('同一时刻的 UTC 与本地入参输出一致', () {
+      final utc = DateTime.utc(2026, 7, 4, 12, 30, 15);
+      expect(TimeFormat.isoDate(utc), TimeFormat.isoDate(utc.toLocal()));
+      expect(
+        TimeFormat.fullDateTime(utc),
+        TimeFormat.fullDateTime(utc.toLocal()),
+      );
+      expect(TimeFormat.timeHms(utc), TimeFormat.timeHms(utc.toLocal()));
+    });
+
+    test('fullDateTime 精确到秒', () {
+      final s = TimeFormat.fullDateTime(DateTime(2026, 7, 4, 1, 2, 3));
+      expect(s, contains('02:03'));
+    });
+
+    test('relative：今天给时分，跨年给年月日', () {
+      final today = TimeFormat.relative(.now());
+      expect(RegExp(r'^\d{1,2}:\d{2}$').hasMatch(today), isTrue);
+      expect(
+        TimeFormat.relative(DateTime(2000, 5, 5, 10, 30)),
+        contains('2000'),
+      );
+    });
+  });
+}

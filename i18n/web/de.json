@@ -1,0 +1,83 @@
+{
+  "content": "Text",
+  "wordCount": "{count} Zeichen",
+  "titlePlaceholder": "Titel",
+  "toolbar": {
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "insertImage": "Bild einfügen",
+    "insertAudio": "Audio einfügen",
+    "insertVideo": "Video einfügen",
+    "insertDiaryLink": "Tagebuch-Link einfügen",
+    "heading": "Überschrift",
+    "insertTable": "Tabelle einfügen",
+    "findReplace": "Suchen und ersetzen",
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "underline": "Unterstrichen",
+    "strike": "Durchgestrichen",
+    "code": "Inline-Code",
+    "bulletList": "Aufzählungsliste",
+    "orderedList": "Nummerierte Liste",
+    "taskList": "Aufgabenliste",
+    "quote": "Zitat",
+    "codeBlock": "Codeblock",
+    "paragraph": "Fließtext",
+    "heading1": "Überschrift 1",
+    "heading2": "Überschrift 2",
+    "heading3": "Überschrift 3",
+    "rowAfterLabel": "+Zeile",
+    "rowAfter": "Zeile darunter einfügen",
+    "deleteRowLabel": "−Zeile",
+    "deleteRow": "Diese Zeile löschen",
+    "columnAfterLabel": "+Spalte",
+    "columnAfter": "Spalte rechts einfügen",
+    "deleteColumnLabel": "−Spalte",
+    "deleteColumn": "Diese Spalte löschen",
+    "deleteTableLabel": "Tabelle",
+    "deleteTable": "Tabelle löschen"
+  },
+  "search": {
+    "findPlaceholder": "Suchen",
+    "replacePlaceholder": "Ersetzen durch",
+    "matchCase": "Groß-/Kleinschreibung",
+    "previous": "Vorheriger Treffer",
+    "next": "Nächster Treffer",
+    "close": "Schließen",
+    "replace": "Ersetzen",
+    "replaceAll": "Alle"
+  },
+  "image": {
+    "size": "Bildgröße",
+    "width": "Breite",
+    "widthSlider": "Bildbreite",
+    "defaultWidth": "Standard",
+    "reset": "Auf Standard zurücksetzen"
+  },
+  "video": {
+    "play": "Abspielen",
+    "pause": "Pause",
+    "mute": "Ton aus",
+    "unmute": "Ton an",
+    "progressLabel": "Videofortschritt",
+    "fullscreen": "Vollbild"
+  },
+  "audio": {
+    "play": "Abspielen",
+    "pause": "Pause",
+    "mute": "Ton aus",
+    "unmute": "Ton an",
+    "progressLabel": "Audiofortschritt",
+    "defaultName": "Audio"
+  },
+  "code": {
+    "plainText": "Klartext",
+    "copy": "Kopieren",
+    "copied": "Kopiert"
+  },
+  "link": {
+    "searching": "Suche…",
+    "prompt": "Stichwort für die Tagebuch-Suche eingeben…",
+    "empty": "Kein passendes Tagebuch"
+  }
+}

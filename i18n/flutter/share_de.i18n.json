@@ -1,0 +1,22 @@
+{
+  "sheetTitle": "Diesen Eintrag teilen",
+  "sheetSubtitle": "Als Bild oder Dokument exportieren — nur dieser Eintrag",
+  "optionImage": "Bild",
+  "optionImageSubtitle": "Langbild · kann in Fotos gespeichert werden",
+  "optionMarkdownSubtitle": "Klartext + Anhänge",
+  "optionDocxSubtitle": "In Word weiterbearbeiten",
+  "optionPdfSubtitle": "Festes Layout",
+  "optionPdfNeedFont": "Festes Layout · zuerst eine Schriftart wählen",
+  "previewTitle": "Bildvorschau",
+  "previewSampleTitle": "Beispiel · erster Eintrag",
+  "rendering": "Wird gerendert…",
+  "renderFailed": "Rendering fehlgeschlagen: {error}",
+  "empty": "Nichts zu teilen",
+  "saveToAlbum": "In Fotos speichern",
+  "share": "Teilen",
+  "savedToAlbum": "In Fotos gespeichert",
+  "savedToAlbumCount": "{count} Bilder in Fotos gespeichert",
+  "saveToAlbumFailed": "Konnte nicht gespeichert werden — Fotoberechtigung prüfen",
+  "subject": "Geteilt mit Moodiary",
+  "generating": "{format} wird erzeugt…"
+}

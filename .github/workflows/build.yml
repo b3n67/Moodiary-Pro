@@ -1,0 +1,134 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    name: Build APK
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Read Flutter Version
+        id: flutter_version
+        run: |
+          if [ -f .fvmrc ]; then
+            FLUTTER_VERSION=$(cat .fvmrc | jq -r '.flutter')
+            echo "Flutter version detected: $FLUTTER_VERSION"
+            echo "flutter-version=$FLUTTER_VERSION" >> $GITHUB_ENV
+          else
+            echo ".fvmrc not found. Defaulting to latest Flutter version."
+            echo "flutter-version=stable" >> $GITHUB_ENV
+          fi
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.flutter-version }}
+
+      - name: Set Up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set Up Rust
+        working-directory: packages/foundation/fast_image/rust
+        run: rustup show active-toolchain
+
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.2
+
+      - name: Install Dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.ANDROID_KJS }}" | base64 --decode > mobile/android/app/key.jks
+
+      - name: Create local.properties
+        run: |
+          echo "storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}" > mobile/android/local.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> mobile/android/local.properties
+
+      - name: Build APK
+        working-directory: mobile
+        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=splitMap
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: mobile/build/app/outputs/flutter-apk/app-release.apk
+  release:
+    runs-on: ubuntu-latest
+    name: Publish Release
+    needs: [ build-apk ]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/android
+
+      - name: Read Version From Pubspec
+        run: |
+          version=$(sed -n 's/^version: \([0-9.]*\)+.*/\1/p' mobile/pubspec.yaml)
+          if [ -z "$version" ]; then
+            echo "could not read version from mobile/pubspec.yaml" >&2
+            exit 1
+          fi
+          echo "Version detected: $version"
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Rename Artifacts
+        run: |
+          mkdir -p renamed-artifacts
+          mv artifacts/android/app-release.apk renamed-artifacts/moodiary-${{ env.VERSION }}-android-arm64.apk
+
+      - name: Extract Release Notes From Changelog
+        run: |
+          awk -v want="## [${{ env.VERSION }}]" '
+            index($0, want) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "no [${{ env.VERSION }}] section in CHANGELOG.md" >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: renamed-artifacts/*
+          tag: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          bodyFile: release-notes.md
+          commit: ${{ github.sha }}
+          draft: true
+          prerelease: false
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}

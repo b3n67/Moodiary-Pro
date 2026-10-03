@@ -1,0 +1,2891 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:moodiary_assistant/src/application/chat_controller.dart';
+import 'package:moodiary_assistant/src/application/chat_items.dart';
+import 'package:moodiary_assistant/src/application/context_compaction_controller.dart';
+import 'package:moodiary_assistant/src/application/diary_citation.dart';
+import 'package:moodiary_assistant/src/application/session_title_controller.dart';
+import 'package:moodiary_assistant/src/application/tool_approval.dart';
+import 'package:moodiary_assistant/src/data/assistant.dart';
+import 'package:moodiary_assistant/src/data/assistant_defs.dart';
+import 'package:moodiary_assistant/src/data/assistant_tools.dart';
+import 'package:moodiary_assistant/src/data/chat_repository.dart';
+import 'package:moodiary_assistant/src/data/llm_preset_repository.dart';
+import 'package:moodiary_assistant/src/data/llm_provider_repository.dart';
+import 'package:moodiary_assistant/src/data/memory_repository.dart';
+import 'package:moodiary_assistant/src/data/model_resolver.dart';
+import 'package:moodiary_assistant/src/presentation/assistant_notice.dart';
+import 'package:moodiary_assistant/src/presentation/assistant_tool_ui.dart';
+import 'package:moodiary_assistant/src/presentation/chat_list.dart';
+import 'package:moodiary_assistant/src/presentation/diary_citations.dart';
+import 'package:moodiary_assistant/src/presentation/markdown_code_block.dart';
+import 'package:moodiary_assistant/src/presentation/model_picker_sheet.dart';
+import 'package:moodiary_assistant/src/presentation/permission_mode_sheet.dart';
+import 'package:moodiary_assistant/src/presentation/provider_logo.dart';
+import 'package:moodiary_assistant/src/presentation/reasoning_label.dart';
+import 'package:moodiary_assistant/src/presentation/tool_approval_card.dart';
+import 'package:moodiary_assistant/src/presentation/tool_approval_preview.dart';
+import 'package:moodiary_components/moodiary_components.dart';
+import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_files/moodiary_files.dart';
+import 'package:moodiary_i18n/moodiary_i18n.dart';
+import 'package:moodiary_models/moodiary_models.dart';
+import 'package:moodiary_router/moodiary_router.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
+import 'package:moodiary_utils/moodiary_utils.dart';
+import 'package:mui/mui.dart';
+
+const double _kComposerControlSize = 40;
+
+const double _kComposerPadding = 8;
+
+const double _kComposerHeightEstimate = 102;
+
+const double _kModelChipMinHeight = 32;
+
+// 轮间 20，轮内 8
+const double _kTurnGap = 20;
+
+enum _ConversationAction { permission, compact, settings }
+
+Widget _codeBlock(
+  BuildContext context,
+  String name,
+  String code,
+  bool closed,
+) => MarkdownCodeBlock(name: name, code: code);
+
+class AssistantPage extends StatefulWidget {
+  final String? initialSessionId;
+
+  final String? initialTitle;
+
+  final String? citedDiaryId;
+
+  const AssistantPage({
+    super.key,
+    this.initialSessionId,
+    this.initialTitle,
+    this.citedDiaryId,
+  });
+
+  factory AssistantPage.fromRoute(GoRouterState state) => AssistantPage(
+    initialSessionId: state.params['session_id'] as String?,
+    initialTitle: state.params['title'] as String?,
+    citedDiaryId: state.params['cited_diary_id'] as String?,
+  );
+
+  @override
+  State<AssistantPage> createState() => _AssistantPageState();
+}
+
+String _sessionTitle(ChatSession? session, Translations l10n) {
+  final title = session?.title.trim() ?? '';
+  return title.isEmpty ? l10n.assistant.newChat : title;
+}
+
+class _AssistantPageState extends State<AssistantPage> {
+  final _inputController = TextEditingController();
+  final _inputFocusNode = FocusNode();
+  final _chatScroll = ScrollController();
+  final _listKey = GlobalKey<AssistantChatListState>();
+
+  late final AssistantChatController _chat;
+
+  StreamSubscription<AssistantStreamEvent>? _streamSub;
+
+  AssistantTurn? _streamingMessage;
+
+  DateTime? _reasoningStart;
+  String _streamingReasoning = '';
+  int _thinkingMillis = 0;
+  bool _thinkingActive = false;
+
+  List<String> _staleReplyIds = [];
+
+  int _generation = 0;
+
+  bool _sending = false;
+  bool _ready = true;
+  bool _initialized = false;
+
+  String? _reasoningLevel;
+
+  final Map<String, LlmProvider> _providers = {};
+
+  bool _resolved = false;
+  bool _providerMissing = false;
+  bool _catalogMissing = false;
+  bool _modelMissing = false;
+
+  LlmProvider? _provider;
+  String _modelId = '';
+
+  bool _canSendImage = false;
+
+  List<String> _reasoningLevels = const [];
+
+  LlmModelPreset? _activeModel;
+
+  int _maxTokens = assistantFallbackMaxTokens;
+
+  bool _canUseTools = true;
+
+  String? _pendingImageName;
+
+  String? _citedDiaryId;
+
+  final ContextCompactionController _compaction = ContextCompactionController();
+  final SessionTitleController _title = SessionTitleController();
+  final ToolApprovalGate _approvalGate = ToolApprovalGate();
+
+  ToolApprovalRequest? _approval;
+  ToolApprovalPreview? _approvalPreview;
+  AssistantPermissionMode? _sessionPermission;
+  String? _queuedText;
+
+  bool _truncated = false;
+
+  int _lastTurnInputTokens = 0;
+
+  int _contextLimit = assistantDefaultContextBudget;
+
+  double _composerHeight = _kComposerHeightEstimate;
+
+  ChatSession? _session;
+
+  bool _disclaimerAccepted = false;
+
+  String _stagedProviderId = '';
+
+  bool _hasUserTurn = false;
+
+  String _lastItemId = '';
+
+  final Map<String, ({AssistantTurn turn, Widget widget})> _turnWidgets = {};
+
+  String _titleText(Translations l10n) {
+    for (final candidate in [_session?.title, widget.initialTitle]) {
+      final trimmed = candidate?.trim() ?? '';
+      if (trimmed.isNotEmpty) return trimmed;
+    }
+    return l10n.assistant.newChat;
+  }
+
+  void _onInputFocusChanged() {
+    if (_inputFocusNode.hasFocus) _listKey.currentState?.pinToBottom();
+  }
+
+  AssistantPermissionMode get _permissionMode =>
+      _sessionPermission ??
+      AssistantPermissionMode.fromId(MoodiaryKVs.assistantPermissionMode.get());
+
+  Future<bool> _gateTool(String callId, String name, String argsJson) async {
+    final spec = AssistantToolRegistry.byId(name);
+    if (spec == null) return true;
+    final args = _decodeArgs(argsJson);
+    final tier = assistantToolTier(spec.tool, args);
+    if (!assistantToolNeedsConfirmation(_permissionMode, tier)) return true;
+    if (!mounted) return false;
+    final request = ToolApprovalRequest(
+      callId: callId,
+      tool: spec.tool,
+      args: args,
+      tier: tier,
+    );
+    final l10n = context.l10n;
+    setState(() {
+      _approval = request;
+      _approvalPreview = null;
+    });
+    unawaited(
+      buildToolApprovalPreview(request, l10n)
+          .catchError(
+            (Object _) => ToolApprovalPreview(
+              subtitle: '',
+              lines: const [],
+              confirmLabel: l10n.common.ok,
+            ),
+          )
+          .then((preview) {
+            if (mounted && _approval?.callId == callId) {
+              setState(() => _approvalPreview = preview);
+            }
+          }),
+    );
+    final approved = await _approvalGate.request(callId);
+    if (mounted && _approval?.callId == callId) {
+      setState(() {
+        _approval = null;
+        _approvalPreview = null;
+      });
+    }
+    return approved;
+  }
+
+  void _resolveApproval(bool approved) {
+    final id = _approval?.callId;
+    if (id != null) _approvalGate.resolve(id, approved);
+  }
+
+  Future<void> _pickPermission() async {
+    final mode = await showPermissionModePicker(
+      context,
+      selected: _permissionMode,
+      subtitle: context.l10n.assistant.permissionSessionOnly,
+    );
+    if (mode != null && mounted) setState(() => _sessionPermission = mode);
+  }
+
+  void _syncDerivedFromItems() {
+    final items = _chat.items;
+    _hasUserTurn = items.any((m) => m is AssistantTurn && m.fromUser);
+    _lastItemId = items.isEmpty ? '' : items.last.id;
+    if (_turnWidgets.isEmpty) return;
+    final live = {for (final m in items) m.id};
+    _turnWidgets.removeWhere((id, _) => !live.contains(id));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _chat = AssistantChatController();
+    _disclaimerAccepted =
+        MoodiaryKVs.assistantDisclaimerAccepted.get() ?? false;
+    _reasoningLevel = MoodiaryKVs.assistantReasoningEffort.get();
+    if (widget.initialSessionId == null) _citedDiaryId = widget.citedDiaryId;
+    _chat.addListener(_syncDerivedFromItems);
+    _inputFocusNode.addListener(_onInputFocusChanged);
+    if (!_disclaimerAccepted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showDisclaimer();
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final id = widget.initialSessionId;
+    if (id != null) {
+      _loadSessionById(id);
+    } else {
+      unawaited(_refreshReady());
+    }
+  }
+
+  @override
+  void dispose() {
+    _approvalGate.declineAll();
+    _chat.removeListener(_syncDerivedFromItems);
+    _inputFocusNode.removeListener(_onInputFocusChanged);
+    _inputController.dispose();
+    _inputFocusNode.dispose();
+    _chatScroll.dispose();
+    _streamSub?.cancel();
+    _chat.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshReady() async {
+    final repo = getIt<LlmProviderRepository>();
+    final session = _session;
+    final pinned = session == null || session.providerId.isEmpty
+        ? null
+        : await repo.getProvider(session.providerId);
+    final staged = pinned != null || _stagedProviderId.isEmpty
+        ? null
+        : await repo.getProvider(_stagedProviderId);
+    final lastId = MoodiaryKVs.assistantLastProviderId.get() ?? '';
+    final last = pinned != null || staged != null || lastId.isEmpty
+        ? null
+        : await repo.getProvider(lastId);
+    final provider = pinned ?? staged ?? last ?? await repo.getActiveProvider();
+    final providerMissing =
+        session != null && session.providerId.isNotEmpty && pinned == null;
+    final all = await repo.getAllProviders();
+    _providers
+      ..clear()
+      ..addEntries([for (final p in all) MapEntry(p.id, p)]);
+    final key = provider == null ? null : await repo.getKey(provider.id);
+    final lastModel = MoodiaryKVs.assistantLastModelId.get() ?? '';
+    final wanted = pinned != null && (session?.model.isNotEmpty ?? false)
+        ? session!.model
+        : providerMissing
+        ? (provider?.defaultModel ?? '')
+        : _modelId.isNotEmpty
+        ? _modelId
+        : last != null && lastModel.isNotEmpty
+        ? lastModel
+        : (provider?.defaultModel ?? '');
+    final resolved = provider == null
+        ? null
+        : ModelResolver.resolve(provider, wanted);
+    final model = resolved?.preset;
+    final catalogMissing =
+        provider != null &&
+        provider.isPreset &&
+        getIt<LlmPresetRepository>().cachedAt == 0;
+    final modelMissing =
+        provider != null &&
+        provider.isPreset &&
+        !catalogMissing &&
+        model == null &&
+        (resolved?.modelId.isNotEmpty ?? false);
+    final caps = _capabilities(provider, model);
+    final levels = provider == null
+        ? const <String>[]
+        : ModelResolver.levelsFor(provider, wanted);
+    if (mounted) {
+      setState(() {
+        _resolved = true;
+        _ready = provider != null && key != null && key.isNotEmpty;
+        _provider = provider;
+        _providerMissing = providerMissing;
+        _catalogMissing = catalogMissing;
+        _modelMissing = modelMissing;
+        _modelId = resolved?.modelId ?? '';
+        _activeModel = model;
+        _reasoningLevels = levels;
+        _canSendImage = caps.attachment;
+        _canUseTools = caps.tools;
+        _contextLimit = model?.contextLimit ?? assistantDefaultContextBudget;
+        _maxTokens = maxTokensFor(model?.outputLimit);
+        if (!caps.attachment) _pendingImageName = null;
+      });
+    }
+  }
+
+  bool get _historyAllowsImages {
+    final model = _activeModel;
+    if (model != null) return model.acceptsImage;
+    final provider = _provider;
+    if (provider == null || provider.isPreset) return true;
+    return provider.attachment;
+  }
+
+  ({bool tools, bool attachment}) _capabilities(
+    LlmProvider? provider,
+    LlmModelPreset? model,
+  ) {
+    if (provider == null) return const (tools: true, attachment: false);
+    if (model != null) {
+      return (tools: model.toolCall, attachment: model.acceptsImage);
+    }
+    if (provider.isPreset) return const (tools: true, attachment: false);
+    return (tools: provider.toolCall, attachment: provider.attachment);
+  }
+
+  Future<List<ProviderModels>> _providerGroups() async {
+    final repo = getIt<LlmProviderRepository>();
+    final providers = await repo.getAllProviders();
+    final keys = await Future.wait(providers.map((p) => repo.getKey(p.id)));
+    return [
+      for (final (i, p) in providers.indexed)
+        (
+          provider: p,
+          options: ModelResolver.optionsFor(p),
+          hasKey: keys[i]?.isNotEmpty ?? false,
+        ),
+    ];
+  }
+
+  Future<void> _pickModel() async {
+    if (_sending) return;
+    final groups = await _providerGroups();
+    if (!mounted) return;
+    if (groups.isEmpty) {
+      await const AssistantProvidersRoute().push(context);
+      await _refreshReady();
+      return;
+    }
+    final choice = await showGlobalModelPicker(
+      context,
+      groups: groups,
+      providerId: _provider?.id ?? '',
+      modelId: _modelId,
+      level: _reasoningLevel,
+      catalogUpdatedAt: getIt<LlmPresetRepository>().cachedAt,
+      onDownloadCatalog: () async {
+        await getIt<LlmPresetRepository>().refresh();
+        return _providerGroups();
+      },
+      onManageProviders: () async {
+        await const AssistantProvidersRoute().push(context);
+        await _refreshReady();
+      },
+      onFillKey: (provider) => _fillKey(provider.id),
+    );
+    if (choice == null || !mounted) return;
+    if (!await _confirmSwitch(choice) || !mounted) return;
+    final level = choice.level;
+    final session = _session;
+    if (session != null) {
+      final updated = session.copyWith(
+        providerId: choice.providerId,
+        model: choice.modelId,
+        reasoningEffort: level ?? reasoningFollowValue,
+      );
+      await getIt<ChatRepository>().upsertSession(updated);
+      if (!mounted) return;
+      setState(() => _session = updated);
+    }
+    final levelChanged = level != _reasoningLevel;
+    setState(() {
+      _stagedProviderId = choice.providerId;
+      _modelId = choice.modelId;
+      _reasoningLevel = level;
+    });
+    MoodiaryKVs.assistantLastProviderId.set(choice.providerId);
+    MoodiaryKVs.assistantLastModelId.set(choice.modelId);
+    if (levelChanged) {
+      if (level == null) {
+        MoodiaryKVs.assistantReasoningEffort.remove();
+      } else {
+        MoodiaryKVs.assistantReasoningEffort.set(level);
+      }
+    }
+    await _refreshReady();
+    unawaited(_maybeCompact());
+  }
+
+  Future<void> _fillKey(String providerId) async {
+    await AssistantProviderEditRoute(id: providerId).push(context);
+    await _refreshReady();
+  }
+
+  Future<bool> _confirmSwitch(GlobalModelChoice choice) async {
+    if (choice.providerId == _provider?.id && choice.modelId == _modelId) {
+      return true;
+    }
+    final provider = await getIt<LlmProviderRepository>().getProvider(
+      choice.providerId,
+    );
+    if (provider == null || !mounted) return true;
+    final resolved = ModelResolver.resolve(provider, choice.modelId);
+    final caps = _capabilities(provider, resolved.preset);
+    final l10n = context.l10n;
+    final notes = <String>[];
+    if (!caps.attachment) {
+      final images = _chat.items
+          .whereType<AssistantTurn>()
+          .where((m) => m.imageName.isNotEmpty)
+          .length;
+      if (images > 0) {
+        notes.add(l10n.assistant.modelSwitchNoImages(count: images));
+      }
+      if (_pendingImageName != null) {
+        notes.add(l10n.assistant.modelSwitchDropPending);
+      }
+    }
+    final limit =
+        resolved.preset?.contextLimit ?? assistantDefaultContextBudget;
+    if (_lastTurnInputTokens > limit * assistantCompactionTriggerRatio) {
+      notes.add(l10n.assistant.modelSwitchSmallerContext);
+    }
+    if (notes.isEmpty) return true;
+    return MAlert.confirm(
+      context,
+      icon: LucideIcons.cpu,
+      title: l10n.assistant.modelSwitchTitle,
+      message: notes.join('\n'),
+      confirmLabel: l10n.assistant.modelSwitchConfirm,
+    );
+  }
+
+  Future<void> _compactNow() async {
+    final session = _session;
+    if (_sending || session == null) return;
+    final l10n = context.l10n;
+    final pending = _compaction.hasPending(
+      session: session,
+      orderedMessages: _compactionMessages(),
+    );
+    if (!pending) {
+      toast.info(message: l10n.assistant.compactNothing);
+      return;
+    }
+    final result = await _maybeCompact(force: true);
+    if (!mounted) return;
+    if (result == null) {
+      toast.error(message: l10n.assistant.compactFailed);
+    } else {
+      toast.success(message: l10n.assistant.compactedNow);
+    }
+  }
+
+  void _onConversationAction(_ConversationAction action) {
+    switch (action) {
+      case .permission:
+        unawaited(_pickPermission());
+      case .compact:
+        unawaited(_compactNow());
+      case .settings:
+        unawaited(_openSettings());
+    }
+  }
+
+  String get _effectiveLevel => effectiveReasoningLevel(
+    stored: _reasoningLevel,
+    levels: _reasoningLevels,
+  );
+
+  Future<void> _loadSessionById(String id) async {
+    final session = await getIt<ChatRepository>().getSession(id);
+    if (!mounted) return;
+    if (session == null) {
+      Navigator.of(context).maybePop();
+      unawaited(_refreshReady());
+      return;
+    }
+    await _loadSession(session);
+  }
+
+  Future<void> _loadSession(ChatSession session) async {
+    _generation++;
+    _streamSub?.cancel();
+    _streamSub = null;
+    _streamingMessage = null;
+    _staleReplyIds = [];
+    _turnWidgets.clear();
+    setState(() {
+      _session = session;
+      _reasoningLevel = storedReasoningLevel(session.reasoningEffort);
+      _pendingImageName = null;
+      _sending = false;
+    });
+    await Future.wait([_chat.loadSession(session.id), _refreshReady()]);
+    if (!mounted) return;
+    _syncCompactionNotice();
+    _syncModelSwitchNotices();
+    _listKey.currentState?.pinToBottom();
+  }
+
+  Future<ChatSession?> _ensureSession(String firstUserText) async {
+    final existing = _session;
+    if (existing != null) return existing;
+    final provider = _provider;
+    if (provider == null) return null;
+    final session = ChatSession.create(
+      providerId: provider.id,
+      model: _modelId,
+      reasoningEffort: _reasoningLevel ?? reasoningFollowValue,
+    );
+    await getIt<ChatRepository>().upsertSession(session);
+    _chat.sessionId = session.id;
+    if (mounted) setState(() => _session = session);
+    unawaited(_generateTitle(session, firstUserText));
+    return session;
+  }
+
+  Future<void> _generateTitle(ChatSession session, String firstUserText) async {
+    final provider = _provider;
+    if (provider == null) return;
+    final key = await getIt<LlmProviderRepository>().getKey(provider.id);
+    if (key == null || key.isEmpty) return;
+    if (!mounted || _session?.id != session.id) return;
+
+    final updated = await _title.maybeTitle(
+      session: session,
+      firstUserText: firstUserText,
+      provider: provider,
+      model: _modelId,
+      apiKey: key,
+    );
+    final current = _session;
+    if (updated == null || !mounted || current?.id != session.id) return;
+    final merged = current!.copyWith(title: updated.title);
+    await getIt<ChatRepository>().upsertSession(merged);
+    if (!mounted || _session?.id != session.id) return;
+    setState(() => _session = merged);
+  }
+
+  Future<void> _openFullscreenComposer() async {
+    final edited = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _FullscreenComposerPage(text: _inputController.text),
+      ),
+    );
+    if (edited == null || !mounted) return;
+    _inputController
+      ..text = edited
+      ..selection = TextSelection.collapsed(offset: edited.length);
+    _inputFocusNode.requestFocus();
+  }
+
+  Future<void> _openSettings() async {
+    await const AssistantSettingRoute().push(context);
+    await _refreshReady();
+  }
+
+  Future<void> _showDisclaimer() async {
+    final l10n = context.l10n;
+    final agreed = await MAlert.confirm(
+      context,
+      icon: LucideIcons.shieldAlert,
+      title: l10n.assistant.disclaimerTitle,
+      message: l10n.assistant.disclaimerContent,
+      confirmLabel: l10n.assistant.disclaimerAgree,
+      cancelLabel: l10n.assistant.disclaimerDecline,
+      barrierDismissible: false,
+    );
+    if (agreed) {
+      MoodiaryKVs.assistantDisclaimerAccepted.set(true);
+      if (!mounted) return;
+      setState(() => _disclaimerAccepted = true);
+      await _refreshReady();
+    }
+  }
+
+  Future<AssistantChatRequest?> _buildRequest(
+    List<AssistantMessage> history, {
+    required String systemPrompt,
+    required String volatilePrefix,
+    required bool toolsActive,
+    List<String>? allowedTools,
+    AssistantToolGate? toolGate,
+  }) async {
+    final provider = _provider;
+    if (provider == null) return null;
+    final key = await getIt<LlmProviderRepository>().getKey(provider.id);
+    if (key == null || key.isEmpty) return null;
+    final route = ModelResolver.resolve(provider, _modelId);
+    return AssistantChatRequest(
+      type: route.protocol,
+      baseUrl: route.baseUrl,
+      apiKey: key,
+      model: route.modelId,
+      systemPrompt: systemPrompt,
+      volatilePrefix: volatilePrefix,
+      maxTokens: _maxTokens,
+      history: history,
+      reasoning: resolveReasoning(
+        level: _effectiveLevel,
+        model: _activeModel,
+        maxTokens: _maxTokens,
+      ),
+      tools: toolsActive,
+      allowedTools: allowedTools,
+      toolGate: toolGate,
+    );
+  }
+
+  void _resetThinkingState() {
+    _reasoningStart = null;
+    _streamingReasoning = '';
+    _thinkingMillis = 0;
+    _thinkingActive = false;
+  }
+
+  Future<void> _submit(String text) async {
+    text = text.trim();
+    final imageName = _pendingImageName;
+    if (_approval != null && text.isNotEmpty) {
+      _queuedText = [?_queuedText, text].join('\n');
+      _inputController.clear();
+      _resolveApproval(false);
+      return;
+    }
+    if ((text.isEmpty && imageName == null) ||
+        _sending ||
+        !_disclaimerAccepted) {
+      return;
+    }
+    final imageLabel = context.l10n.assistant.imageMessageLabel;
+    final gen = ++_generation;
+    _staleReplyIds = [];
+
+    final base = DateTime.timestamp();
+    final cited = _citedDiaryId;
+    final userMsg = AssistantTurn.user(
+      cited == null ? text : citeDiary(text, cited),
+      imageName: imageName ?? '',
+      createdAt: base,
+    );
+    _chat.add(userMsg);
+    _inputController.clear();
+    setState(() {
+      _sending = true;
+      _pendingImageName = null;
+      _citedDiaryId = null;
+    });
+
+    await _generate(
+      gen: gen,
+      sessionSeedText: text.isEmpty ? imageLabel : text,
+      userMessage: userMsg,
+      placeholderAt: base.add(const Duration(milliseconds: 1)),
+    );
+  }
+
+  Future<void> _regenerate() async {
+    if (_sending || !_disclaimerAccepted) return;
+    final gen = ++_generation;
+    _streamSub?.cancel();
+    _streamSub = null;
+    _streamingMessage = null;
+
+    final items = _chat.items;
+    var lastUserIdx = -1;
+    for (var i = items.length - 1; i >= 0; i--) {
+      final m = items[i];
+      if (m is AssistantTurn && m.fromUser) {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    if (lastUserIdx == -1) return;
+    final userMsg = items[lastUserIdx] as AssistantTurn;
+
+    setState(() => _sending = true);
+    final trailing = items.sublist(lastUserIdx + 1).toList();
+    _chat.batch(() {
+      for (final m in trailing) {
+        _chat.remove(m);
+        if (m is AssistantTurn) _staleReplyIds.add(m.id);
+      }
+    });
+    _syncModelSwitchNotices();
+    if (!mounted || gen != _generation) return;
+
+    await _generate(
+      gen: gen,
+      sessionSeedText: splitDiaryCitation(userMsg.text).text,
+      userMessage: userMsg,
+      placeholderAt: .timestamp(),
+    );
+  }
+
+  Future<void> _continueTurn() async {
+    if (_sending || !_disclaimerAccepted || _session == null) return;
+    final gen = ++_generation;
+    _staleReplyIds = [];
+    final base = DateTime.timestamp();
+    final userMsg = AssistantTurn.user(continueTurnMarker, createdAt: base);
+    _chat.add(userMsg);
+    setState(() => _sending = true);
+    await _generate(
+      gen: gen,
+      sessionSeedText: '',
+      userMessage: userMsg,
+      placeholderAt: base.add(const Duration(milliseconds: 1)),
+    );
+  }
+
+  void _flushQueued() {
+    final queued = _queuedText;
+    _queuedText = null;
+    if (queued != null && mounted) unawaited(_submit(queued));
+  }
+
+  Future<void> _generate({
+    required int gen,
+    required String sessionSeedText,
+    required AssistantTurn userMessage,
+    required DateTime placeholderAt,
+  }) async {
+    _listKey.currentState?.pinToBottom();
+    final l10n = context.l10n;
+    final toolsActive = _canUseTools;
+    final memoryEnabled =
+        toolsActive && (MoodiaryKVs.assistantMemoryEnabled.get() ?? true);
+    final allowedTools = memoryEnabled ? null : toolIdsWithoutMemory();
+    final factCount = memoryEnabled
+        ? await getIt<MemoryRepository>().count()
+        : null;
+    if (!mounted || gen != _generation) return;
+    final systemPrompt = buildStableSystemPrompt(
+      toolsEnabled: toolsActive,
+      memoryEnabled: memoryEnabled,
+      userNotes: MoodiaryKVs.assistantUserNotes.get() ?? '',
+      confirmsWrites: toolsActive && _permissionMode.confirmsWrites,
+    );
+    final volatilePrefix = buildTurnContext(
+      nowLocal: .now(),
+      factCount: factCount,
+      semanticSearch: AssistantToolRegistry.semanticAvailable,
+    );
+
+    _resetThinkingState();
+    _truncated = false;
+    _lastTurnInputTokens = 0;
+    final placeholder = AssistantTurn.assistant(
+      '',
+      streaming: true,
+      createdAt: placeholderAt,
+      model: _modelId,
+      providerId: _provider?.id ?? '',
+    );
+    _chat.beginStreaming(placeholder);
+    _streamingMessage = placeholder;
+    _syncModelSwitchNotices();
+
+    final history = _buildHistory();
+
+    final request = await _buildRequest(
+      history,
+      systemPrompt: systemPrompt,
+      volatilePrefix: volatilePrefix,
+      toolsActive: toolsActive,
+      allowedTools: allowedTools,
+      toolGate: _gateTool,
+    );
+    if (!mounted || gen != _generation) return;
+    if (request == null) {
+      _appendDelta(l10n.assistant.needProvider);
+      _finalizeStreaming(persist: false);
+      await _refreshReady();
+      if (mounted && gen == _generation) setState(() => _sending = false);
+      return;
+    }
+
+    final session = await _ensureSession(sessionSeedText);
+    if (!mounted || gen != _generation) return;
+    if (session != null) {
+      await _chat.persist(userMessage);
+      if (!mounted || gen != _generation) return;
+    }
+
+    final needApiKeyText = l10n.assistant.needApiKey;
+    var errored = false;
+    try {
+      _streamSub = getIt<AssistantService>()
+          .chat(request)
+          .listen(
+            (event) {
+              if (gen != _generation) return;
+              switch (event.kind) {
+                case .text:
+                  _appendDelta(event.text);
+                case .reasoning:
+                  _appendReasoning(event.text);
+                case .tool:
+                  _freezeThinkingOnTool();
+                case .toolStarted:
+                  _applyToolStarted(event.callId, event.text, event.argsJson);
+                case .toolFinished:
+                  _applyToolFinished(event.callId, event.text);
+                case .usage:
+                  _applyUsage(event.inputTokens, event.outputTokens);
+                case .turn:
+                  _applyTurn(event);
+                case .turnDiscarded:
+                  _discardTurn();
+              }
+            },
+            onError: (Object e) {
+              if (gen != _generation) return;
+              errored = true;
+              if (e is AssistantNotConfiguredException) {
+                _appendDelta(needApiKeyText);
+                _refreshReady();
+              } else {
+                _appendDelta(
+                  l10n.assistant.streamError(error: _errorText(l10n, e)),
+                );
+              }
+              _finalizeStreaming(persist: true);
+              if (mounted) setState(() => _sending = false);
+              unawaited(_maybeCompact());
+              _flushQueued();
+            },
+            onDone: () {
+              if (gen != _generation) return;
+              if (errored) return;
+              _finalizeStreaming(persist: true);
+              if (mounted) setState(() => _sending = false);
+              unawaited(_maybeCompact());
+              _flushQueued();
+            },
+          );
+    } catch (e) {
+      _appendDelta(l10n.assistant.requestFailed(error: '$e'));
+      _finalizeStreaming(persist: false);
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  List<AssistantMessage> _buildHistory() {
+    final allowImages = _historyAllowsImages;
+
+    final raw =
+        <
+          ({String id, AssistantRole role, String content, String? imagePath})
+        >[];
+    for (final m in _chat.items) {
+      if (m is! AssistantTurn) continue;
+      final hasImage = m.imageName.isNotEmpty;
+      var content = !m.fromUser
+          ? _withToolRecord(m)
+          : m.text == continueTurnMarker
+          ? continueTurnForModel
+          : diaryCitationForModel(m.text);
+      if (hasImage && !allowImages) {
+        content = content.isEmpty
+            ? assistantImagePlaceholder
+            : '$assistantImagePlaceholder\n\n$content';
+      }
+      if (content.isEmpty && !(hasImage && allowImages)) continue;
+      raw.add((
+        id: m.id,
+        role: m.fromUser ? AssistantRole.user : AssistantRole.assistant,
+        content: content,
+        imagePath: hasImage && allowImages
+            ? AppFiles.getRealPath('image', m.imageName)
+            : null,
+      ));
+    }
+
+    final session = _session;
+    final summary = session?.compactedSummary;
+    final watermark = session?.compactedUpToMessageId;
+    var start = 0;
+    if (summary != null && summary.isNotEmpty && watermark != null) {
+      final at = raw.indexWhere((e) => e.id == watermark);
+      if (at >= 0) start = at + 1;
+    }
+    final kept = raw.sublist(start);
+
+    final result = <AssistantMessage>[];
+    if (start > 0 && summary != null && summary.isNotEmpty) {
+      result
+        ..add(.user('[Summary of earlier conversation]\n$summary'))
+        ..add(const .assistant('Understood — I have the earlier context.'));
+    }
+
+    for (final e in kept) {
+      if (e.imagePath == null &&
+          result.isNotEmpty &&
+          result.last.role == e.role &&
+          result.last.imagePath == null) {
+        result.last = AssistantMessage(
+          e.role,
+          '${result.last.content}\n\n${e.content}',
+        );
+      } else {
+        result.add(AssistantMessage(e.role, e.content, imagePath: e.imagePath));
+      }
+    }
+    return result;
+  }
+
+  String _errorText(Translations l10n, Object error) =>
+      switch (assistantErrorCode(error)) {
+        'max_turns' => l10n.assistant.errorMaxTurns,
+        'unknown_tool' => l10n.assistant.errorUnknownTool,
+        'cancelled' => l10n.assistant.errorCancelled,
+        _ => '$error',
+      };
+
+  String _withToolRecord(AssistantTurn turn) {
+    if (!_canUseTools) return turn.text;
+    final record = AssistantToolRegistry.recordOf(turn.toolCalls);
+    if (record.isEmpty) return turn.text;
+    return turn.text.isEmpty ? record : '$record\n\n${turn.text}';
+  }
+
+  Future<ChatSession?> _maybeCompact({bool force = false}) async {
+    final session = _session;
+    if (session == null || (!force && _lastTurnInputTokens <= 0)) return null;
+    final provider = _provider;
+    if (provider == null) return null;
+    final key = await getIt<LlmProviderRepository>().getKey(provider.id);
+    if (key == null || key.isEmpty) return null;
+    if (!mounted || _session?.id != session.id) return null;
+
+    final updated = await _compaction.maybeCompact(
+      session: session,
+      orderedMessages: _compactionMessages(),
+      lastInputTokens: _lastTurnInputTokens,
+      contextLimit: _contextLimit,
+      provider: provider,
+      model: _modelId,
+      apiKey: key,
+      force: force,
+    );
+    final current = _session;
+    if (updated == null || !mounted || current?.id != session.id) return null;
+    final merged = current!.copyWith(
+      compactedSummary: updated.compactedSummary,
+      compactedUpToMessageId: updated.compactedUpToMessageId,
+      compactedAt: updated.compactedAt,
+      compactedInputTokensAtTrigger: updated.compactedInputTokensAtTrigger,
+    );
+    await getIt<ChatRepository>().upsertSession(merged);
+    if (!mounted || _session?.id != session.id) return null;
+    setState(() => _session = merged);
+    _syncCompactionNotice();
+    return merged;
+  }
+
+  List<CompactionMessage> _compactionMessages() => [
+    for (final m in _chat.items)
+      if (m is AssistantTurn && !m.isEmpty)
+        (
+          id: m.id,
+          fromUser: m.fromUser,
+          text: m.text.isEmpty ? assistantImagePlaceholder : m.text,
+        ),
+  ];
+
+  void _syncCompactionNotice() {
+    _chat.batch(() {
+      _chat.removeWhere((m) => m is AssistantCompactionNotice);
+      final session = _session;
+      final watermark = session?.compactedUpToMessageId;
+      if (session?.compactedSummary == null || watermark == null) return;
+      final idx = _chat.indexOfId(watermark);
+      if (idx < 0) return;
+      _chat.insertAt(idx + 1, AssistantCompactionNotice(watermark));
+    });
+  }
+
+  void _syncModelSwitchNotices() {
+    _chat.batch(() {
+      _chat.removeWhere((m) => m is AssistantModelSwitchNotice);
+      for (final notice in modelSwitchNoticesFor(_chat.items)) {
+        final idx = _chat.indexOfId(notice.beforeId);
+        if (idx >= 0) _chat.insertAt(idx, notice);
+      }
+    });
+  }
+
+  Future<void> _restoreFullHistory() async {
+    final session = _session;
+    if (session == null || session.compactedSummary == null) return;
+    final restored = session.copyWith(
+      compactedSummary: null,
+      compactedUpToMessageId: null,
+      compactedAt: null,
+      compactedInputTokensAtTrigger: null,
+    );
+    await getIt<ChatRepository>().upsertSession(restored);
+    if (!mounted) return;
+    setState(() => _session = restored);
+    _syncCompactionNotice();
+  }
+
+  void _stop() {
+    if (!_sending) return;
+    final queued = _queuedText;
+    _queuedText = null;
+    if (queued != null) _inputController.text = queued;
+    _approvalGate.declineAll();
+    _generation++;
+    _streamSub?.cancel();
+    _streamSub = null;
+    _finalizeStreaming(persist: true);
+    setState(() => _sending = false);
+  }
+
+  void _finalizeStreaming({required bool persist}) {
+    _approvalGate.declineAll();
+    _approval = null;
+    _approvalPreview = null;
+    final cur = _streamingMessage;
+    _streamingMessage = null;
+    if (cur == null) return;
+    if (cur.text.isEmpty) {
+      _chat.batch(() {
+        _chat.remove(cur);
+        _chat.endStreaming();
+      });
+    } else {
+      final settled = cur.settled.copyWith(truncated: _truncated);
+      _chat.batch(() {
+        _chat.replace(settled);
+        _chat.endStreaming();
+      });
+      if (persist) {
+        unawaited(_chat.persist(settled));
+        _purgeStaleReplies();
+      }
+    }
+    _syncModelSwitchNotices();
+  }
+
+  void _applyTurn(AssistantStreamEvent event) {
+    _truncated = event.finishReason == 'length';
+    if (event.inputTokens > 0) _lastTurnInputTokens = event.inputTokens;
+  }
+
+  void _discardTurn() {
+    final cur = _streamingMessage;
+    if (cur == null) return;
+    _streamingReasoning = '';
+    _syncReasoning(cur.copyWith(text: ''));
+  }
+
+  void _purgeStaleReplies() {
+    if (_staleReplyIds.isEmpty) return;
+    final ids = _staleReplyIds;
+    _staleReplyIds = [];
+    for (final id in ids) {
+      unawaited(_chat.deleteMessage(id));
+    }
+  }
+
+  void _appendDelta(String delta) {
+    if (delta.isEmpty) return;
+    _freezeThinkingTimer();
+    final cur = _streamingMessage;
+    if (cur == null) return;
+    _syncReasoning(cur.copyWith(text: cur.text + delta));
+  }
+
+  void _appendReasoning(String delta) {
+    if (delta.isEmpty) return;
+    final cur = _streamingMessage;
+    if (cur == null) return;
+    _reasoningStart ??= DateTime.timestamp();
+    _thinkingActive = true;
+    _streamingReasoning += delta;
+    _syncReasoning(cur);
+  }
+
+  void _applyToolStarted(String callId, String name, String argsJson) {
+    final cur = _streamingMessage;
+    if (cur == null) return;
+    if (cur.toolCalls.any((c) => c.callId == callId)) return;
+    final next = cur.copyWith(
+      toolCalls: [
+        ...cur.toolCalls,
+        AssistantToolCall(callId: callId, name: name, argsJson: argsJson),
+      ],
+    );
+    _chat.updateStreaming(next);
+    _streamingMessage = next;
+  }
+
+  void _applyToolFinished(String callId, String result) {
+    final cur = _streamingMessage;
+    if (cur == null) return;
+    final index = cur.toolCalls.indexWhere((c) => c.callId == callId);
+    if (index == -1) return;
+    final updated = [...cur.toolCalls];
+    updated[index] = updated[index].copyWith(result: result, done: true);
+    final next = cur.copyWith(toolCalls: updated);
+    _chat.updateStreaming(next);
+    _streamingMessage = next;
+  }
+
+  void _applyUsage(int inputTokens, int outputTokens) {
+    final cur = _streamingMessage;
+    if (cur == null || (inputTokens <= 0 && outputTokens <= 0)) return;
+    final next = cur.copyWith(
+      inputTokens: _lastTurnInputTokens > 0
+          ? _lastTurnInputTokens
+          : inputTokens,
+      outputTokens: outputTokens,
+    );
+    _chat.updateStreaming(next);
+    _streamingMessage = next;
+  }
+
+  void _freezeThinkingOnTool() {
+    if (!_thinkingActive) return;
+    _freezeThinkingTimer();
+    final cur = _streamingMessage;
+    if (cur != null) _syncReasoning(cur);
+  }
+
+  void _freezeThinkingTimer() {
+    if (!_thinkingActive) return;
+    _thinkingActive = false;
+    final start = _reasoningStart;
+    if (start != null) {
+      _thinkingMillis += DateTime.timestamp().difference(start).inMilliseconds;
+      _reasoningStart = null;
+    }
+  }
+
+  int _liveThinkingMillis() {
+    final start = _reasoningStart;
+    if (_thinkingActive && start != null) {
+      return _thinkingMillis +
+          DateTime.timestamp().difference(start).inMilliseconds;
+    }
+    return _thinkingMillis;
+  }
+
+  void _syncReasoning(AssistantTurn message) {
+    var next = message;
+    if (_streamingReasoning.isNotEmpty) {
+      next = next.copyWith(
+        reasoning: _streamingReasoning,
+        thinkingMillis: _liveThinkingMillis(),
+        thinkingActive: _thinkingActive,
+      );
+    }
+    if (_streamingMessage == null) return;
+    _chat.updateStreaming(next);
+    _streamingMessage = next;
+  }
+
+  Future<void> _pickImage() async {
+    if (_sending) return;
+    _inputFocusNode.unfocus();
+    final files = await getIt<IFilePicker>().pickImages(context, maxAssets: 1);
+    if (files.isEmpty || !mounted) return;
+    final first = files.first;
+    final saved = await MediaManager.saveImages(imageFileList: [first]);
+    final name = saved[first.path];
+    if (name == null || !mounted) return;
+    setState(() => _pendingImageName = name);
+  }
+
+  void _removePendingImage() {
+    setState(() => _pendingImageName = null);
+  }
+
+  void _removeCitation() {
+    setState(() => _citedDiaryId = null);
+  }
+
+  void _dismissComposer() {
+    if (_inputFocusNode.hasFocus) _inputFocusNode.unfocus();
+  }
+
+  Widget _buildChat() {
+    if (_session == null && _chat.items.isEmpty) {
+      return _EmptyConversation(bottomInset: _composerHeight);
+    }
+    return AssistantChatList(
+      key: _listKey,
+      controller: _chat,
+      scrollController: _chatScroll,
+      itemBuilder: _buildItem,
+      scrollToBottomBuilder: _buildScrollToBottom,
+      onPointerDown: _dismissComposer,
+      itemGap: _kTurnGap,
+      bottomPadding: _composerHeight + 8,
+    );
+  }
+
+  Widget _buildItem(BuildContext context, AssistantChatItem item, int index) {
+    return switch (item) {
+      AssistantTurn() => _buildTurn(item),
+      AssistantCompactionNotice() => _CompactionNoticeChip(
+        summary: _session?.compactedSummary ?? '',
+        onRestore: _restoreFullHistory,
+      ),
+      AssistantModelSwitchNotice(:final model, :final providerId) =>
+        _ModelSwitchChip(
+          model: switch (_providers[providerId]) {
+            final p? =>
+              '${p.name} · ${ModelResolver.resolve(p, model).preset?.name ?? model}',
+            null => model,
+          },
+        ),
+    };
+  }
+
+  Widget _buildTurn(AssistantTurn turn) {
+    final isLast = _lastItemId == turn.id;
+    if (!isLast && !turn.streaming) {
+      final cached = _turnWidgets[turn.id];
+      if (cached != null && identical(cached.turn, turn)) return cached.widget;
+      final built = _composeTurn(turn, live: false, last: false);
+      _turnWidgets[turn.id] = (turn: turn, widget: built);
+      return built;
+    }
+    return _composeTurn(turn, live: !_sending && isLast, last: isLast);
+  }
+
+  Widget _composeTurn(
+    AssistantTurn turn, {
+    required bool live,
+    required bool last,
+  }) {
+    if (turn.fromUser) {
+      final (:diaryId, :text) = splitDiaryCitation(turn.text);
+      return _UserBubble(
+        text: text == continueTurnMarker
+            ? context.l10n.assistant.continueTurn
+            : text,
+        imageName: turn.imageName,
+        citedDiaryId: diaryId,
+        onRetry: live ? _regenerate : null,
+      );
+    }
+    return _AssistantBubble(
+      text: turn.text,
+      reasoning: turn.reasoning,
+      thinkingMillis: turn.thinkingMillis,
+      thinkingActive: turn.thinkingActive,
+      inputTokens: turn.inputTokens,
+      outputTokens: turn.outputTokens,
+      toolCalls: turn.toolCalls,
+      diaryCitations: turn.diaryCitations,
+      streaming: turn.streaming,
+      showUsage: last,
+      awaitingCallId: turn.streaming ? _approval?.callId : null,
+      onRegenerate: (live && _hasUserTurn) ? _regenerate : null,
+      onContinue: live && turn.truncated ? _continueTurn : null,
+    );
+  }
+
+  Widget _buildScrollToBottom(
+    BuildContext context,
+    bool visible,
+    VoidCallback onTap,
+  ) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: _composerHeight + 8,
+      child: Center(
+        child: AnimatedSlide(
+          offset: visible ? .zero : const Offset(0, 0.6),
+          duration: Durations.short4,
+          curve: Easing.standard,
+          child: AnimatedOpacity(
+            opacity: visible ? 1 : 0,
+            duration: Durations.short4,
+            child: IgnorePointer(
+              ignoring: !visible,
+              child: _ScrollToBottomButton(onTap: onTap),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConversation(BuildContext context) {
+    final composer = _AssistantComposer(
+      controller: _inputController,
+      focusNode: _inputFocusNode,
+      sending: _sending,
+      onSend: () => _submit(_inputController.text),
+      onStop: _stop,
+      onSendImage: _canSendImage ? _pickImage : null,
+      onFullscreen: _openFullscreenComposer,
+      pendingImageName: _pendingImageName,
+      onRemoveImage: _removePendingImage,
+      citedDiaryId: _citedDiaryId,
+      onRemoveCitation: _removeCitation,
+      modelChip: _resolved ? _buildModelChip(context.l10n) : null,
+      approval: _approval,
+      approvalPreview: _approvalPreview,
+      onApprove: () => _resolveApproval(true),
+      onSkip: () => _resolveApproval(false),
+    );
+
+    return Column(
+      children: [
+        ?_statusBanner(context.l10n),
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(child: _buildChat()),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _SizeReporter(
+                  onHeight: (height) {
+                    if (mounted) setState(() => _composerHeight = height);
+                  },
+                  child: composer,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget? _statusBanner(Translations l10n) {
+    if (!_resolved) return null;
+    final provider = _provider;
+    if (provider == null) {
+      return _StatusBanner(
+        text: l10n.assistant.notConfiguredBanner,
+        error: true,
+        onTap: _openSettings,
+      );
+    }
+    if (!_ready) {
+      return _StatusBanner(
+        text: l10n.assistant.providerKeyMissingBanner(name: provider.name),
+        error: true,
+        onTap: () => _fillKey(provider.id),
+      );
+    }
+    if (_providerMissing) {
+      return _StatusBanner(
+        text: l10n.assistant.providerMissingBanner(name: provider.name),
+        error: false,
+        onTap: _sending ? null : _pickModel,
+      );
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+
+    final Widget chatArea = !_disclaimerAccepted
+        ? _DisclaimerGate(onReview: _showDisclaimer)
+        : _buildConversation(context);
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        title: Text(_titleText(l10n), maxLines: 1, overflow: .ellipsis),
+        actions: [
+          MMenuButton<_ConversationAction>(
+            tooltip: l10n.common.more,
+            entries: [
+              MMenuEntry(
+                value: .permission,
+                label: l10n.assistant.permissionTitle,
+                icon: LucideIcons.shieldCheck,
+                enabled: !_sending,
+              ),
+              MMenuEntry(
+                value: .compact,
+                label: l10n.assistant.menuCompactNow,
+                icon: LucideIcons.foldVertical,
+                enabled: _session != null && !_sending,
+              ),
+              MMenuEntry(
+                value: .settings,
+                label: l10n.assistant.menuSettings,
+                icon: LucideIcons.settings2,
+              ),
+            ],
+            onSelected: _onConversationAction,
+            child: Padding(
+              padding: const .all(12),
+              child: Icon(
+                LucideIcons.ellipsisVertical,
+                color: context.theme.colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      body: chatArea,
+    );
+  }
+
+  Widget _buildModelChip(Translations l10n) {
+    return _ModelChip(
+      provider: _provider,
+      providerMissing: _providerMissing,
+      modelLabel: _activeModel?.name ?? _modelId,
+      modelMissing: _modelMissing,
+      catalogMissing: _catalogMissing,
+      levelLabel: _reasoningLevels.isEmpty
+          ? ''
+          : _effectiveLevel.isEmpty
+          ? l10n.assistant.reasoningOff
+          : reasoningLevelLabel(_effectiveLevel, l10n),
+      onTap: _sending ? null : _pickModel,
+    );
+  }
+}
+
+class _ModelSwitchChip extends StatelessWidget {
+  final String model;
+
+  const _ModelSwitchChip({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    return AssistantNotice(
+      icon: LucideIcons.cpu,
+      kind: context.l10n.assistant.modelSwitched(model: model),
+    );
+  }
+}
+
+class _CompactionNoticeChip extends StatelessWidget {
+  final String summary;
+  final VoidCallback onRestore;
+
+  const _CompactionNoticeChip({required this.summary, required this.onRestore});
+
+  @override
+  Widget build(BuildContext context) {
+    return AssistantNotice(
+      icon: LucideIcons.foldVertical,
+      kind: context.l10n.assistant.compactionNotice,
+      onTap: () => _showSheet(context),
+    );
+  }
+
+  void _showSheet(BuildContext context) {
+    MSheet.show<void>(
+      context,
+      builder: (sheetContext) {
+        final l10n = sheetContext.l10n;
+        return MSheetScaffold<void>(
+          title: l10n.assistant.compactionSheetTitle,
+          icon: LucideIcons.chevronsUpDown,
+          actions: [
+            MAction(label: l10n.common.cancel),
+            MAction(
+              label: l10n.assistant.compactionRestore,
+              isPrimary: true,
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                onRestore();
+              },
+            ),
+          ],
+          child: Column(
+            mainAxisSize: .min,
+            crossAxisAlignment: .stretch,
+            children: [
+              Text(
+                l10n.assistant.compactionSheetNote,
+                style: sheetContext.theme.typography.bodySmall.onSurfaceVariant,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                summary.isEmpty ? '—' : summary,
+                style: sheetContext.theme.typography.bodyMedium.onSurface,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DisclaimerGate extends StatelessWidget {
+  final VoidCallback onReview;
+
+  const _DisclaimerGate({required this.onReview});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final l10n = context.l10n;
+    return Center(
+      child: Padding(
+        padding: const .all(32),
+        child: Column(
+          mainAxisSize: .min,
+          children: [
+            Icon(LucideIcons.shield, size: 56, color: scheme.primary),
+            const SizedBox(height: 16),
+            Text(
+              l10n.assistant.disclaimerGateTitle,
+              textAlign: .center,
+              style: context.theme.typography.titleMedium.onSurface,
+            ),
+            const SizedBox(height: 20),
+            FilledButton.tonalIcon(
+              onPressed: onReview,
+              icon: const Icon(LucideIcons.fileText),
+              label: Text(l10n.assistant.disclaimerGateAction),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModelChip extends StatelessWidget {
+  final LlmProvider? provider;
+  final bool providerMissing;
+  final String modelLabel;
+  final bool modelMissing;
+  final bool catalogMissing;
+  final String levelLabel;
+  final VoidCallback? onTap;
+
+  const _ModelChip({
+    required this.provider,
+    required this.providerMissing,
+    required this.modelLabel,
+    required this.modelMissing,
+    required this.catalogMissing,
+    required this.levelLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final scheme = context.theme.colors;
+    final typography = context.theme.typography;
+    final provider = this.provider;
+    final broken = modelLabel.isEmpty || modelMissing;
+
+    return MInkWell.fade(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _kModelChipMinHeight),
+        child: Padding(
+          padding: const .symmetric(horizontal: 8),
+          child: Row(
+            mainAxisSize: .min,
+            children: [
+              if (providerMissing)
+                Icon(LucideIcons.triangleAlert, size: 16, color: scheme.error)
+              else if (provider != null)
+                ProviderLogo(
+                  logoUrl: ProviderLogo.urlOf(provider.presetId),
+                  name: provider.name,
+                  size: 18,
+                ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  modelLabel.isEmpty
+                      ? l10n.assistant.historyModelUnset
+                      : modelLabel,
+                  maxLines: 1,
+                  overflow: .ellipsis,
+                  style: broken
+                      ? typography.labelSmall.error
+                      : typography.labelSmall.onSurface,
+                ),
+              ),
+              if (modelMissing) ...[
+                const SizedBox(width: 6),
+                Text(
+                  l10n.assistant.modelNotInCatalog,
+                  style: typography.labelSmall.error,
+                ),
+              ] else if (catalogMissing) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  LucideIcons.cloudOff,
+                  size: 14,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+              if (levelLabel.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Text(
+                  '· $levelLabel',
+                  style: typography.labelSmall.onSurfaceVariant,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyConversation extends StatelessWidget {
+  final double bottomInset;
+
+  const _EmptyConversation({required this.bottomInset});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final hour = DateTime.now().hour;
+    final greeting = hour < 5 || hour >= 18
+        ? l10n.assistant.emptyGreetingEvening
+        : hour < 11
+        ? l10n.assistant.emptyGreetingMorning
+        : l10n.assistant.emptyGreetingAfternoon;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottomInset),
+      child: Center(
+        child: Column(
+          mainAxisSize: .min,
+          children: [
+            Text(
+              greeting,
+              style: context.theme.typography.titleLarge.emphasized.onSurface,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.assistant.emptySubtitle,
+              textAlign: .center,
+              style: context.theme.typography.bodyMedium.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusBanner extends StatelessWidget {
+  final String text;
+  final bool error;
+  final VoidCallback? onTap;
+
+  const _StatusBanner({
+    required this.text,
+    required this.error,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final typography = context.theme.typography.bodyMedium;
+    return Material(
+      color: error ? scheme.errorContainer : scheme.secondaryContainer,
+      child: MInkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const .all(12),
+          child: Row(
+            children: [
+              Icon(
+                LucideIcons.triangleAlert,
+                color: error
+                    ? scheme.onErrorContainer
+                    : scheme.onSecondaryContainer,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  text,
+                  style: error
+                      ? typography.onErrorContainer
+                      : typography.onSecondaryContainer,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantComposer extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool sending;
+  final VoidCallback onSend;
+  final VoidCallback onStop;
+
+  final VoidCallback? onSendImage;
+  final VoidCallback onFullscreen;
+  final String? pendingImageName;
+  final VoidCallback onRemoveImage;
+  final String? citedDiaryId;
+  final VoidCallback onRemoveCitation;
+  final Widget? modelChip;
+  final ToolApprovalRequest? approval;
+  final ToolApprovalPreview? approvalPreview;
+  final VoidCallback onApprove;
+  final VoidCallback onSkip;
+
+  const _AssistantComposer({
+    required this.controller,
+    required this.focusNode,
+    required this.sending,
+    required this.onSend,
+    required this.onStop,
+    required this.onSendImage,
+    required this.onFullscreen,
+    required this.pendingImageName,
+    required this.onRemoveImage,
+    required this.citedDiaryId,
+    required this.onRemoveCitation,
+    required this.modelChip,
+    required this.approval,
+    required this.approvalPreview,
+    required this.onApprove,
+    required this.onSkip,
+  });
+
+  @override
+  State<_AssistantComposer> createState() => _AssistantComposerState();
+}
+
+class _AssistantComposerState extends State<_AssistantComposer> {
+  bool _overflowing = false;
+
+  int _maxLines(BuildContext context) {
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    if (scale >= 1.6) return 3;
+    if (scale >= 1.3) return 4;
+    return 6;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final l10n = context.l10n;
+    const radius = MuiRadius.xl;
+    final approval = widget.approval;
+    final inputEnabled = !widget.sending || approval != null;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: .fromLTRB(12, 0, 12, 8 + MediaQuery.paddingOf(context).bottom),
+        child: GestureDetector(
+          behavior: .opaque,
+          child: Column(
+            mainAxisSize: .min,
+            crossAxisAlignment: .stretch,
+            children: [
+              if (approval != null) ...[
+                ToolApprovalCard(
+                  request: approval,
+                  preview: widget.approvalPreview,
+                  onApprove: widget.onApprove,
+                  onSkip: widget.onSkip,
+                ),
+                const SizedBox(height: 8),
+              ],
+              MGlassSurface(
+                shape: const RoundedRectangleBorder(borderRadius: radius),
+                child: Padding(
+                  padding: const .all(_kComposerPadding),
+                  child: Column(
+                    mainAxisSize: .min,
+                    crossAxisAlignment: .stretch,
+                    children: [
+                      if (widget.citedDiaryId case final cited?)
+                        Padding(
+                          padding: const .fromLTRB(8, 6, 8, 2),
+                          child: DiaryCitations(
+                            ids: [cited],
+                            raised: true,
+                            onRemove: widget.onRemoveCitation,
+                          ),
+                        ),
+                      if (widget.pendingImageName != null)
+                        _ComposerImagePreview(
+                          imageName: widget.pendingImageName!,
+                          onRemove: widget.onRemoveImage,
+                        ),
+                      Padding(
+                        padding: const .fromLTRB(8, 8, 8, 6),
+                        child: NotificationListener<ScrollMetricsNotification>(
+                          onNotification: (notification) {
+                            final overflowing =
+                                notification.metrics.maxScrollExtent > 0;
+                            if (overflowing != _overflowing) {
+                              setState(() => _overflowing = overflowing);
+                            }
+                            return false;
+                          },
+                          child: MField(
+                            controller: widget.controller,
+                            focusNode: widget.focusNode,
+                            enabled: inputEnabled,
+                            maxLines: _maxLines(context),
+                            variant: .plain,
+                            showClear: false,
+                            textInputAction: .send,
+                            hintText: l10n.assistant.inputHint,
+                            onSubmitted: (_) => widget.onSend(),
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: .spaceBetween,
+                        children: [
+                          if (widget.onSendImage case final onSendImage?)
+                            Tooltip(
+                              message: l10n.assistant.toolSendImage,
+                              child: MInkWell.fade(
+                                onTap: widget.sending ? null : onSendImage,
+                                child: SizedBox.square(
+                                  dimension: _kComposerControlSize,
+                                  child: Icon(
+                                    LucideIcons.image,
+                                    color: widget.sending
+                                        ? scheme.onSurfaceVariant.withValues(
+                                            alpha: 0.38,
+                                          )
+                                        : scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            const SizedBox.shrink(),
+                          Expanded(
+                            child: Row(
+                              mainAxisAlignment: .end,
+                              children: [
+                                if (_overflowing) ...[
+                                  Tooltip(
+                                    message: l10n.assistant.composerFullscreen,
+                                    child: MInkWell.fade(
+                                      onTap: widget.onFullscreen,
+                                      child: SizedBox.square(
+                                        dimension: _kComposerControlSize,
+                                        child: Icon(
+                                          LucideIcons.maximize2,
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                if (widget.modelChip case final chip?) ...[
+                                  Flexible(child: chip),
+                                  const SizedBox(width: 8),
+                                ],
+                                ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: widget.controller,
+                                  builder: (context, value, _) {
+                                    if (widget.sending && approval == null) {
+                                      return MCircleButton(
+                                        tooltip: l10n.assistant.stop,
+                                        onPressed: widget.onStop,
+                                        size: _kComposerControlSize,
+                                        icon: const Icon(LucideIcons.square),
+                                      );
+                                    }
+                                    final canSend =
+                                        value.text.trim().isNotEmpty ||
+                                        (approval == null &&
+                                            widget.pendingImageName != null);
+                                    return MCircleButton(
+                                      tooltip: l10n.assistant.send,
+                                      onPressed: canSend ? widget.onSend : null,
+                                      size: _kComposerControlSize,
+                                      icon: const Icon(LucideIcons.arrowUp),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SizeReporter extends StatefulWidget {
+  final Widget child;
+  final ValueChanged<double> onHeight;
+
+  const _SizeReporter({required this.child, required this.onHeight});
+
+  @override
+  State<_SizeReporter> createState() => _SizeReporterState();
+}
+
+class _SizeReporterState extends State<_SizeReporter> {
+  final _key = GlobalKey();
+  double _last = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedule();
+  }
+
+  void _schedule() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _key.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize) return;
+      final height = box.size.height;
+      if ((height - _last).abs() < 0.5) return;
+      _last = height;
+      widget.onHeight(height);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<SizeChangedLayoutNotification>(
+      onNotification: (_) {
+        _schedule();
+        return true;
+      },
+      child: SizeChangedLayoutNotifier(
+        child: KeyedSubtree(key: _key, child: widget.child),
+      ),
+    );
+  }
+}
+
+class _ScrollToBottomButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ScrollToBottomButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MCircleButton(
+      tooltip: context.l10n.assistant.scrollToBottom,
+      onPressed: onTap,
+      tone: .plain,
+      size: 36,
+      elevated: true,
+      icon: const Icon(LucideIcons.chevronDown),
+    );
+  }
+}
+
+class _ComposerImagePreview extends StatelessWidget {
+  final String imageName;
+  final VoidCallback onRemove;
+
+  const _ComposerImagePreview({
+    required this.imageName,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    return Padding(
+      padding: const .fromLTRB(8, 6, 8, 2),
+      child: Align(
+        alignment: .centerLeft,
+        child: Stack(
+          clipBehavior: .none,
+          children: [
+            ClipRRect(
+              borderRadius: MuiRadius.inside(
+                MuiRadius.xl,
+                _kComposerPadding * 2,
+              ),
+              child: Image.file(
+                File(AppFiles.getRealPath('image', imageName)),
+                width: 72,
+                height: 72,
+                fit: .cover,
+                errorBuilder: (_, _, _) => _brokenImage(scheme, 72),
+              ),
+            ),
+            Positioned(
+              top: -6,
+              right: -6,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    shape: .circle,
+                    border: .all(color: scheme.surfaceContainer, width: 2),
+                  ),
+                  padding: const .all(2),
+                  child: Icon(
+                    LucideIcons.x,
+                    size: 15,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Size? _imageBox(String path, BoxConstraints limit) {
+  try {
+    final (width, height) = ImageSizeManager().getSize(path);
+    if (width <= 0 || height <= 0) return null;
+    return limit.constrainSizeAndAttemptToPreserveAspectRatio(
+      Size(width.toDouble(), height.toDouble()),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+Widget _brokenImage(ColorScheme scheme, double size) => Container(
+  width: size,
+  height: size,
+  color: scheme.surfaceContainerHighest,
+  child: Icon(LucideIcons.imageOff, color: scheme.onSurfaceVariant),
+);
+
+class _UserBubble extends StatelessWidget {
+  final String text;
+  final String imageName;
+  final String? citedDiaryId;
+  final VoidCallback? onRetry;
+
+  const _UserBubble({
+    required this.text,
+    this.imageName = '',
+    this.citedDiaryId,
+    this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final maxWidth = MediaQuery.sizeOf(context).width * 0.82;
+    final hasImage = imageName.isNotEmpty;
+    final hasText = text.isNotEmpty;
+
+    final parts = <Widget>[];
+    if (citedDiaryId case final cited?) {
+      parts.add(
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth, minWidth: 180),
+          child: DiaryCitations(ids: [cited]),
+        ),
+      );
+      if (hasImage || hasText) parts.add(const SizedBox(height: 6));
+    }
+    if (hasImage) {
+      final path = AppFiles.getRealPath('image', imageName);
+      final limit = BoxConstraints(maxWidth: maxWidth, maxHeight: 260);
+      final box = _imageBox(path, limit);
+      parts.add(
+        ClipRRect(
+          borderRadius: .circular(14),
+          child: ColoredBox(
+            color: scheme.surfaceContainerHighest,
+            child: ConstrainedBox(
+              constraints: limit,
+              child: Image.file(
+                File(path),
+                width: box?.width,
+                height: box?.height,
+                fit: .cover,
+                errorBuilder: (_, _, _) => _brokenImage(scheme, 120),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (hasText) {
+      if (hasImage) parts.add(const SizedBox(height: 6));
+      parts.add(
+        Container(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          padding: const .symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: const .only(
+              topLeft: .circular(16),
+              topRight: .circular(16),
+              bottomLeft: .circular(16),
+              bottomRight: .circular(4),
+            ),
+          ),
+          child: SelectableText(
+            text,
+            style: context.theme.typography.bodyMedium.onSurface,
+          ),
+        ),
+      );
+    }
+
+    final content = Column(
+      crossAxisAlignment: .end,
+      mainAxisSize: .min,
+      children: parts,
+    );
+
+    if (onRetry == null) return content;
+    return Column(
+      crossAxisAlignment: .end,
+      mainAxisSize: .min,
+      children: [
+        content,
+        _BubbleActionButton(
+          icon: LucideIcons.rotateCw,
+          label: context.l10n.assistant.regenerate,
+          onTap: onRetry!,
+        ),
+      ],
+    );
+  }
+}
+
+String _compactTokens(int n) {
+  if (n < 1000) return '$n';
+  if (n < 1000000) return '${(n / 1000).toStringAsFixed(1)}K';
+  return '${(n / 1000000).toStringAsFixed(1)}M';
+}
+
+String _durationText(int millis) {
+  final secs = millis / 1000;
+  if (secs >= 10) return secs.toStringAsFixed(0);
+  return (secs < 0.1 ? 0.1 : secs).toStringAsFixed(1);
+}
+
+String _reasoningPeek(String reasoning, {required bool tail}) {
+  final lines = [
+    for (final line in reasoning.split('\n'))
+      if (line.trim().isNotEmpty)
+        line.trim().replaceAll(RegExp(r'^[#>\-*\s]+'), ''),
+  ];
+  if (lines.isEmpty) return '';
+  return tail ? lines.last : lines.first;
+}
+
+class _AssistantBubble extends StatelessWidget {
+  final String text;
+  final String reasoning;
+  final int thinkingMillis;
+  final bool thinkingActive;
+  final int inputTokens;
+  final int outputTokens;
+  final List<AssistantToolCall> toolCalls;
+  final List<DiaryCitation> diaryCitations;
+  final bool streaming;
+  final bool showUsage;
+  final VoidCallback? onRegenerate;
+
+  final String? awaitingCallId;
+
+  final VoidCallback? onContinue;
+
+  const _AssistantBubble({
+    required this.text,
+    required this.reasoning,
+    required this.thinkingMillis,
+    required this.thinkingActive,
+    required this.inputTokens,
+    required this.outputTokens,
+    required this.toolCalls,
+    required this.diaryCitations,
+    required this.streaming,
+    required this.showUsage,
+    this.onRegenerate,
+    this.awaitingCallId,
+    this.onContinue,
+  });
+
+  String _citationLabel(Translations l10n, DiaryCitationKind kind) =>
+      switch (kind) {
+        .read => l10n.assistant.citationRead,
+        .created => l10n.assistant.citationCreated,
+        .updated => l10n.assistant.citationUpdated,
+        .deleted => l10n.assistant.citationDeleted,
+      };
+
+  IconData _citationIcon(DiaryCitationKind kind) => switch (kind) {
+    .read => LucideIcons.bookOpenText,
+    .created => LucideIcons.filePlus2,
+    .updated => LucideIcons.filePenLine,
+    .deleted => LucideIcons.trash2,
+  };
+
+  List<Widget> _toolRows(BuildContext context, Translations l10n) {
+    final rows = <Widget>[];
+    final placed = <DiaryCitationKind>{};
+    for (final (i, call) in toolCalls.indexed) {
+      if (!citesDiaries(call)) {
+        rows.add(
+          _toolNotice(
+            context,
+            call,
+            i,
+            awaiting: call.callId == awaitingCallId,
+          ),
+        );
+        continue;
+      }
+      final kind = diaryCitationKindOf(call.name)!;
+      if (!placed.add(kind)) continue;
+      final group = [
+        for (final c in diaryCitations)
+          if (c.kind == kind) c.id,
+      ];
+      if (group.isEmpty) continue;
+      rows.add(
+        AssistantNotice(
+          key: ValueKey('citations-${kind.name}'),
+          stateKey: 'citations-${kind.name}',
+          icon: _citationIcon(kind),
+          kind: _citationLabel(l10n, kind),
+          summary: l10n.assistant.citationCount(count: group.length),
+          detailPadding: const .fromLTRB(0, 2, 0, 6),
+          detail: (context) => DiaryCitations(ids: group),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final l10n = context.l10n;
+
+    final hasText = text.isNotEmpty;
+    final showThinking = thinkingActive || reasoning.isNotEmpty;
+
+    Widget? bubble;
+    if (hasText) {
+      bubble = SelectionArea(
+        child: GptMarkdown(
+          text,
+          style: context.theme.typography.bodyMedium.onSurface,
+          codeBuilder: _codeBlock,
+        ),
+      );
+    } else if (!showThinking) {
+      bubble = const Padding(
+        padding: .symmetric(vertical: 4),
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    final stacked = <Widget>[
+      if (showThinking)
+        AssistantNotice(
+          key: const ValueKey('thinking'),
+          stateKey: 'thinking',
+          hideSummaryWhenExpanded: true,
+          icon: thinkingActive ? null : LucideIcons.brain,
+          kind: thinkingActive
+              ? l10n.assistant.thinking
+              : l10n.assistant.thoughtFor(
+                  duration: _durationText(thinkingMillis),
+                ),
+          summary: _reasoningPeek(reasoning, tail: thinkingActive),
+          detail: reasoning.isEmpty
+              ? null
+              : (context) => GptMarkdown(
+                  reasoning,
+                  style: context.theme.typography.bodySmall.onSurfaceVariant,
+                  codeBuilder: _codeBlock,
+                ),
+        ),
+      ..._toolRows(context, l10n),
+      ?bubble,
+    ];
+
+    if (!hasText || streaming) {
+      return _fullWidth(
+        Column(
+          crossAxisAlignment: .start,
+          mainAxisSize: .min,
+          children: stacked,
+        ),
+      );
+    }
+
+    final hasTokens = showUsage && (inputTokens > 0 || outputTokens > 0);
+    return _fullWidth(
+      Column(
+        crossAxisAlignment: .start,
+        mainAxisSize: .min,
+        children: [
+          ...stacked,
+          Wrap(
+            crossAxisAlignment: .center,
+            children: [
+              _BubbleActionButton(
+                icon: LucideIcons.copy,
+                label: l10n.assistant.copyTooltip,
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: text));
+                  toast.success(message: l10n.assistant.copied);
+                },
+              ),
+              if (onRegenerate != null)
+                _BubbleActionButton(
+                  icon: LucideIcons.rotateCw,
+                  label: l10n.assistant.regenerate,
+                  onTap: onRegenerate!,
+                ),
+              if (onContinue case final onContinue?) ...[
+                Padding(
+                  padding: const .symmetric(horizontal: 6, vertical: 4),
+                  child: Text(
+                    l10n.assistant.truncatedNotice,
+                    style: context.theme.typography.labelSmall.onSurfaceVariant,
+                  ),
+                ),
+                _BubbleActionButton(
+                  icon: LucideIcons.arrowRight,
+                  label: l10n.assistant.continueTurn,
+                  onTap: onContinue,
+                ),
+              ],
+              if (hasTokens)
+                Padding(
+                  padding: const .symmetric(horizontal: 6, vertical: 4),
+                  child: DefaultTextStyle.merge(
+                    style: context.theme.typography.labelSmall.onSurfaceVariant,
+                    child: Row(
+                      mainAxisSize: .min,
+                      children: [
+                        Icon(
+                          LucideIcons.arrowUp,
+                          size: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(_compactTokens(inputTokens)),
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.arrowDown,
+                          size: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(_compactTokens(outputTokens)),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _toolNotice(
+  BuildContext context,
+  AssistantToolCall call,
+  int index, {
+  bool awaiting = false,
+}) {
+  final spec = AssistantToolRegistry.byId(call.name);
+  final display = spec == null
+      ? null
+      : assistantToolDisplay(context, spec.tool);
+  final title = display?.title ?? call.name;
+  final stateKey = call.callId.isEmpty ? 'tool#$index' : call.callId;
+  if (awaiting) {
+    return AssistantNotice(
+      key: ValueKey(stateKey),
+      icon: display?.icon ?? LucideIcons.wrench,
+      kind: title,
+      summary: context.l10n.assistant.toolAwaitingConfirm,
+    );
+  }
+  if (!call.done) {
+    return AssistantNotice(key: ValueKey(stateKey), kind: title);
+  }
+  final input = _decodeArgs(call.argsJson);
+  return AssistantNotice(
+    key: ValueKey(stateKey),
+    stateKey: stateKey,
+    icon: display?.icon ?? LucideIcons.wrench,
+    kind: title,
+    summary: spec?.summaryOf(input, call.result) ?? call.result,
+    detail: input.isEmpty && call.result.isEmpty
+        ? null
+        : (context) => AssistantToolDetail(args: input, result: call.result),
+  );
+}
+
+Map<String, dynamic> _decodeArgs(String raw) {
+  if (raw.trim().isEmpty) return const {};
+  try {
+    final decoded = jsonDecode(raw);
+    return decoded is Map ? decoded.cast<String, dynamic>() : const {};
+  } catch (_) {
+    return const {};
+  }
+}
+
+Widget _fullWidth(Widget child) => SizedBox(width: .infinity, child: child);
+
+class _BubbleActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _BubbleActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    return MInkWell.fade(
+      onTap: onTap,
+      child: Padding(
+        padding: const .symmetric(horizontal: 6, vertical: 4),
+        child: Row(
+          mainAxisSize: .min,
+          children: [
+            Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: context.theme.typography.bodySmall.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AssistantSessionListPage extends StatelessWidget {
+  const AssistantSessionListPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.assistant.settingFunctionAIAssistant),
+        actions: [
+          IconButton(
+            tooltip: l10n.assistant.menuSettings,
+            icon: const Icon(LucideIcons.settings2),
+            onPressed: () => const AssistantSettingRoute().push(context),
+          ),
+        ],
+      ),
+      body: _SessionListView(
+        onSelect: (session) => AssistantConversationRoute(
+          sessionId: session.id,
+          title: session.title,
+        ).push(context),
+        onDelete: (session) =>
+            getIt<ChatRepository>().deleteSession(session.id),
+        padding: .only(bottom: 8 + MediaQuery.paddingOf(context).bottom),
+      ),
+    );
+  }
+}
+
+@visibleForTesting
+enum SessionHistoryBucket { today, last7, earlier }
+
+typedef SessionHistoryGroup = ({
+  SessionHistoryBucket bucket,
+  List<ChatSession> sessions,
+});
+
+@visibleForTesting
+List<SessionHistoryGroup> sessionHistoryGroups(
+  List<ChatSession> sessions, {
+  required DateTime now,
+}) {
+  final local = now.toLocal();
+  final today = DateTime(local.year, local.month, local.day);
+  final weekAgo = today.subtract(const Duration(days: 7));
+  final buckets = <SessionHistoryBucket, List<ChatSession>>{};
+  for (final session in sessions) {
+    final at = session.updatedAt.toLocal();
+    final bucket = !at.isBefore(today)
+        ? SessionHistoryBucket.today
+        : !at.isBefore(weekAgo)
+        ? SessionHistoryBucket.last7
+        : SessionHistoryBucket.earlier;
+    (buckets[bucket] ??= <ChatSession>[]).add(session);
+  }
+  return [
+    for (final bucket in SessionHistoryBucket.values)
+      if (buckets[bucket] case final list?) (bucket: bucket, sessions: list),
+  ];
+}
+
+sealed class _HistoryEntry {
+  const _HistoryEntry();
+}
+
+class _HistoryHeader extends _HistoryEntry {
+  final SessionHistoryBucket bucket;
+
+  const _HistoryHeader(this.bucket);
+}
+
+class _HistoryRow extends _HistoryEntry {
+  final ChatSession session;
+  final SessionHistoryBucket bucket;
+
+  const _HistoryRow(this.session, this.bucket);
+}
+
+class _SessionListView extends StatefulWidget {
+  final void Function(ChatSession session) onSelect;
+
+  final void Function(ChatSession session) onDelete;
+
+  final EdgeInsetsGeometry padding;
+
+  const _SessionListView({
+    required this.onSelect,
+    required this.onDelete,
+    this.padding = EdgeInsets.zero,
+  });
+
+  @override
+  State<_SessionListView> createState() => _SessionListViewState();
+}
+
+class _SessionListViewState extends State<_SessionListView> {
+  List<ChatSession>? _sessions;
+  StreamSubscription<void>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _sub = getIt<ChatRepository>().sessionEvents.listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final sessions = await getIt<ChatRepository>().getAllSessions();
+    if (mounted) setState(() => _sessions = sessions);
+  }
+
+  List<_HistoryEntry> _entries(List<ChatSession> sessions) {
+    return [
+      for (final group in sessionHistoryGroups(
+        sessions,
+        now: DateTime.now(),
+      )) ...[
+        _HistoryHeader(group.bucket),
+        for (final session in group.sessions)
+          _HistoryRow(session, group.bucket),
+      ],
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = _sessions;
+    return switch (sessions) {
+      null => const Center(child: CircularProgressIndicator()),
+      [] => const _EmptySessions(),
+      final list => Builder(
+        builder: (context) {
+          final entries = _entries(list);
+          return ListView.builder(
+            padding: widget.padding,
+            itemCount: entries.length,
+            itemBuilder: (context, index) => switch (entries[index]) {
+              _HistoryHeader(:final bucket) => _HistoryGroupLabel(bucket),
+              _HistoryRow(:final session, :final bucket) => _SessionTile(
+                session: session,
+                bucket: bucket,
+                onTap: () => widget.onSelect(session),
+                onDelete: () => widget.onDelete(session),
+              ),
+            },
+          );
+        },
+      ),
+    };
+  }
+}
+
+class _HistoryGroupLabel extends StatelessWidget {
+  final SessionHistoryBucket bucket;
+
+  const _HistoryGroupLabel(this.bucket);
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final label = switch (bucket) {
+      .today => l10n.assistant.historyToday,
+      .last7 => l10n.assistant.historyLast7,
+      .earlier => l10n.assistant.historyEarlier,
+    };
+    return Padding(
+      padding: const .fromLTRB(16, 18, 16, 4),
+      child: Text(
+        label,
+        style: context.theme.typography.labelSmall.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
+class _EmptySessions extends StatelessWidget {
+  const _EmptySessions();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    return Center(
+      child: Column(
+        mainAxisSize: .min,
+        children: [
+          Icon(
+            LucideIcons.messagesSquare,
+            size: 40,
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            context.l10n.assistant.historyEmpty,
+            style: context.theme.typography.bodyMedium.onSurfaceVariant,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionTile extends StatelessWidget {
+  final ChatSession session;
+  final SessionHistoryBucket bucket;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _SessionTile({
+    required this.session,
+    required this.bucket,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  String _time() => switch (bucket) {
+    .today => TimeFormat.clock(session.updatedAt),
+    .last7 => TimeFormat.weekdayShort(session.updatedAt),
+    .earlier => TimeFormat.relative(session.updatedAt),
+  };
+
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final l10n = context.l10n;
+    return MAlert.confirm(
+      context,
+      title: l10n.common.delete,
+      message: _sessionTitle(session, l10n),
+      confirmLabel: l10n.common.delete,
+      isDestructive: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.theme.colors;
+    final typography = context.theme.typography;
+    final l10n = context.l10n;
+    return Dismissible(
+      key: ValueKey(session.id),
+      direction: .endToStart,
+      confirmDismiss: (_) => _confirmDelete(context),
+      onDismissed: (_) => onDelete(),
+      background: ColoredBox(
+        color: scheme.errorContainer,
+        child: Align(
+          alignment: .centerRight,
+          child: Padding(
+            padding: const .only(right: 20),
+            child: Icon(
+              LucideIcons.trash2,
+              size: 20,
+              color: scheme.onErrorContainer,
+            ),
+          ),
+        ),
+      ),
+      child: MInkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const .symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _sessionTitle(session, l10n),
+                  maxLines: 1,
+                  overflow: .ellipsis,
+                  style: typography.bodyMedium.onSurface,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(_time(), style: typography.labelSmall.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FullscreenComposerPage extends StatefulWidget {
+  final String text;
+
+  const _FullscreenComposerPage({required this.text});
+
+  @override
+  State<_FullscreenComposerPage> createState() =>
+      _FullscreenComposerPageState();
+}
+
+class _FullscreenComposerPageState extends State<_FullscreenComposerPage> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.text,
+  )..selection = TextSelection.collapsed(offset: widget.text.length);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.assistant.composerFullscreen),
+        actions: [
+          Padding(
+            padding: const .only(right: 8),
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(_controller.text),
+              child: Text(l10n.common.ok),
+            ),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const .fromLTRB(16, 8, 16, 16),
+          child: MField(
+            controller: _controller,
+            autofocus: true,
+            maxLines: null,
+            expands: true,
+            variant: .plain,
+            showClear: false,
+            hintText: l10n.assistant.inputHint,
+          ),
+        ),
+      ),
+    );
+  }
+}

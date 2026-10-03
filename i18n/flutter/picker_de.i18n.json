@@ -1,0 +1,13 @@
+{
+  "recentAlbum": "Zuletzt",
+  "done": "Fertig",
+  "doneCount": "Fertig {count}/{max}",
+  "limitedTip": "Die App kann nur auf ausgewählte Fotos zugreifen",
+  "limitedManage": "Verwalten",
+  "permissionDenied": "Gewähre den Fotobibliothekszugriff in den Einstellungen",
+  "a11ySelect": "Auswählen",
+  "a11yUnselect": "Abwählen",
+  "capture": "Kamera",
+  "record": "Aufnehmen",
+  "captureFailed": "Aufnahme fehlgeschlagen"
+}
