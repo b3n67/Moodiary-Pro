@@ -75,6 +75,7 @@ flutter:
     - res/sponsor/
     # ignore: asset_directory_does_not_exist
     - assets/licenses/
+    - assets/fonts/
 
   uses-material-design: true
 

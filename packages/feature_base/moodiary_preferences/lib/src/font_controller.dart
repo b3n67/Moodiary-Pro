@@ -18,6 +18,7 @@ class FontController extends _$FontController {
 
   @override
   Future<List<Font>> build() async {
+    await _repository.ensureSeeded();
     final list = await _repository.getAllFonts();
     await Future.wait([
       for (final f in list)

@@ -28,6 +28,7 @@ class _PdfFontPageState extends State<PdfFontPage> {
   }
 
   Future<void> _load() async {
+    await getIt<FontRepository>().ensureSeeded();
     final fonts = await getIt<FontRepository>().scanDiskFonts();
     if (!mounted) return;
     setState(() {

@@ -4,6 +4,12 @@ Basis: ZhuJHua/moodiary (Branch `develop`), erweitert um Deutsch,
 OneDrive-Sync und Komfortfunktionen. Installiert wird per APK (gleiche
 Signatur, Update ohne Deinstallation möglich).
 
+## Unveröffentlicht
+- Mitgelieferte Schriften (OFL): **Arimo** (≈ Arial), **Tinos**
+  (≈ Times New Roman), **Lato**, **Nunito**, **Open Sans** — beim ersten
+  Start automatisch in der Schriften-Verwaltung (und im PDF-Export);
+  Arial/Times selbst sind proprietär und liegen nicht bei
+
 ## Aktuell: Moodiary-25-20261011 (2.8.1+100)
 
 **Neu in dieser Version:**
