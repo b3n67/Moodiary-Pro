@@ -46,19 +46,5 @@ jobs:
           } >> $GITHUB_ENV
           echo "RELEASE_URL=$(gh release view "v${{ env.VERSION }}" --json url --jq '.url')" >> $GITHUB_ENV
 
-      # GITHUB_TOKEN 触发的 release 事件不会再唤起 telegram-bot.yml，所以在这里直接发。
-      - name: Send Telegram Message
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          format: html
-          message: |
-            🎉 A new release is live! 🎉
-
-            Version: v${{ env.VERSION }}
-
-            Release Notes:
-            ${{ env.RELEASE_NOTES }}
-
-            🔗 View Release: ${{ env.RELEASE_URL }}
+      # Telegram-Benachrichtigung im Fork deaktiviert (kein Kanal):
+      # Ursprünglich wurde hier per appleboy/telegram-action gesendet.
