@@ -51,6 +51,14 @@ void main() {
       expect(names, ['a.jpg']);
     });
 
+    test('eckige Klammern gelten als unsicher', () async {
+      final names = await AssistantToolRegistry.resolveImageNames(
+        ['x].jpg', 'y[.jpg', 'ok.jpg'],
+        exists: (name) async => true,
+      );
+      expect(names, ['ok.jpg']);
+    });
+
     test('keine Liste → leer', () async {
       expect(
         await AssistantToolRegistry.resolveImageNames(

@@ -41,7 +41,9 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   }
 
   static bool _ready(List<String> o) =>
-      _at(o, 1).isNotEmpty && _at(o, 2).isNotEmpty;
+      _at(o, 1).isNotEmpty &&
+      _at(o, 2).isNotEmpty &&
+      _clientIdOf(o).isNotEmpty;
 
   OneDriveHttp get http => _http ??= OneDriveHttp();
 
@@ -313,11 +315,9 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   }
 
   SyncException _graphError(String key, OneDriveHttpResponse response, String action) {
-    final detail = _errorDetail(response);
+    final detail = _errorDetail(response) ?? 'HTTP ${response.statusCode}';
     return SyncException(
-      detail != null
-          ? l10n.sync.errStatRemote(key: key, error: detail)
-          : l10n.sync.errStatRemote(key: key, error: 'HTTP ${response.statusCode}'),
+      _message(action, key, detail),
       kind: _kind(response.statusCode),
     );
   }
@@ -348,6 +348,17 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
     }
   }
 
+  /// Fehlermeldung passend zur Aktion (lesen/schreiben/löschen/abfragen).
+  String _message(String action, String key, Object error) => switch (action) {
+        'write' || 'create' => l10n.sync.errWriteRemote(
+          key: key,
+          error: error,
+        ),
+        'delete' => l10n.sync.errDeleteRemote(key: key, error: error),
+        'stat' => l10n.sync.errStatRemote(key: key, error: error),
+        _ => l10n.sync.errReadRemote(key: key, error: error),
+      };
+
   Object _wrap(Object e, String key, String action) {
     if (e is SyncException) return e;
     if (e is OneDriveAuthException) {
@@ -356,22 +367,16 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
         kind: .auth,
       );
     }
+    final detail = e is OneDriveHttpException ? e.message : e.toString();
+    // Aktion bestimmt den Text, Fehlertyp die Art (wie bisher).
+    final message = _message(action, key, detail);
     if (e is TimeoutException) {
-      return SyncException(
-        l10n.sync.errReadRemote(key: key, error: e.toString()),
-        kind: .network,
-      );
+      return SyncException(message, kind: .network);
     }
     if (e is OneDriveHttpException) {
-      return SyncException(
-        l10n.sync.errReadRemote(key: key, error: e.message),
-        kind: _kind(e.statusCode),
-      );
+      return SyncException(message, kind: _kind(e.statusCode));
     }
-    return SyncException(
-      l10n.sync.errReadRemote(key: key, error: e.toString()),
-      kind: .unknown,
-    );
+    return SyncException(message, kind: .unknown);
   }
 
   @override

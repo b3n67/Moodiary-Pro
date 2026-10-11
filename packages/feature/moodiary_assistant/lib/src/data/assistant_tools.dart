@@ -1104,7 +1104,7 @@ abstract final class AssistantToolRegistry {
     Object? raw, {
     Future<bool> Function(String name)? exists,
   }) => _resolveImageNames(raw, exists: exists);
-  static final _unsafeName = RegExp(r'[/\\]|\.\.|[()]|[\x00-\x1f\x7f]');
+  static final _unsafeName = RegExp(r'[/\\]|\.\.|[()\[\]]|[\x00-\x1f\x7f]');
 
   static Future<List<String>> _resolveImageNames(
     Object? raw, {
@@ -1164,6 +1164,7 @@ abstract final class AssistantToolRegistry {
     final title = input['title'] as String?;
     if (title != null) updated = updated.copyWith(title: title.trim());
     final content = input['content'] as String?;
+    var contentChanged = content != null;
     if (content != null) {
       final converted = _toTiptap(content);
       updated = updated.copyWith(
@@ -1185,6 +1186,7 @@ abstract final class AssistantToolRegistry {
           .where((n) => !updated.content.contains(n))
           .map((n) => '![]($n)')
           .join('\n');
+      if (refs.isNotEmpty) contentChanged = true;
       updated = withDerivedMedia(
         updated.copyWith(
           content: refs.isEmpty
@@ -1210,7 +1212,9 @@ abstract final class AssistantToolRegistry {
 
     await repo.updateADiary(
       newDiary: updated,
-      index: (title == null && content == null) ? .skip : .inline,
+      // Nur bei Inhaltsänderung einreihen: reine Metadaten (mood,
+      // category) brauchen weder Backlinks noch neues Embedding.
+      index: (title == null && !contentChanged) ? .skip : .inline,
     );
     final shown = updated.title.trim().isEmpty
         ? 'Untitled'

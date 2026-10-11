@@ -369,4 +369,53 @@ void main() {
       isNotNull,
     );
   });
+
+  test('Nachrichten mit hängender sessionId brechen Restore nicht ab', () async {
+    await SettingsBackup.restore({
+      'chatSessions': [
+        {'id': 's-ok', 'title': 'Ok'},
+      ],
+      'chatMessages': [
+        {'id': 'm-ok', 'sessionId': 's-ok', 'content': 'drin'},
+        {'id': 'm-dangling', 'sessionId': 'gibts-nicht', 'content': 'raus'},
+        {'id': 'm-empty', 'content': 'raus'},
+      ],
+      'chatToolCalls': [
+        {'messageId': 'm-ok', 'seq': 0, 'callId': 'c-ok', 'name': 'n-ok'},
+        {'messageId': 'm-dangling', 'seq': 0, 'callId': 'c-raus', 'name': 'x'},
+      ],
+    });
+    expect(
+      await (db.select(
+        db.chatMessages,
+      )..where((m) => m.id.equals('m-ok'))).getSingleOrNull(),
+      isNotNull,
+    );
+    expect(
+      await (db.select(
+        db.chatMessages,
+      )..where((m) => m.id.equals('m-dangling'))).getSingleOrNull(),
+      isNull,
+    );
+    expect(
+      await (db.select(
+        db.assistantToolCalls,
+      )..where((c) => c.callId.equals('c-ok'))).getSingleOrNull(),
+      isNotNull,
+    );
+    expect(
+      await (db.select(
+        db.assistantToolCalls,
+      )..where((c) => c.callId.equals('c-raus'))).getSingleOrNull(),
+      isNull,
+    );
+  });
+
+  test('fremder Abschnittstyp bricht Restore nicht ab', () async {
+    await SettingsBackup.restore({
+      'chatSessions': 'keine-liste',
+      'chatMessages': {'id': 'x'},
+      'chatToolCalls': 42,
+    });
+  });
 }

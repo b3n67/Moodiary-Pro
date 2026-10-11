@@ -256,11 +256,14 @@ class _OneDriveSignInSheetState extends State<_OneDriveSignInSheet> {
   }
 
   Future<void> _openBrowser(Uri url) async {
+    var opened = false;
     try {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+      opened = await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (_) {
-      // Der Nutzer kann den Link von Hand öffnen.
+      // Fällt unten auf den Fehler-Zweig: Die URL wird angezeigt,
+      // damit sie von Hand geöffnet werden kann.
     }
+    if (!opened && mounted) setState(() => _error = url.toString());
   }
 
   @override

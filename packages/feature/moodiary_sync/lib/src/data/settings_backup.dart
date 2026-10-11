@@ -228,6 +228,13 @@ final class SettingsBackup {
       return v is int ? v : fallback;
     }
 
+    // Abschnitte aus fremden Snapshots können alles sein – nur Listen
+    // sind gültig, alles andere wird wie ein fehlender Abschnitt behandelt.
+    List<Map> sectionMaps(Object? section) {
+      if (section is! List) return const [];
+      return section.whereType<Map>().toList();
+    }
+
     final providers = snapshot['llmProviders'];
     if (providers is List) {
       await db.batch((b) {
@@ -278,13 +285,20 @@ final class SettingsBackup {
     }
 
     // Chats in Fremdschlüssel-Reihenfolge: Sessions → Nachrichten → Tool-Calls.
-    final sessions = snapshot['chatSessions'];
-    if (sessions is List) {
+    // Zeilen mit hängendem Fremdschlüssel werden übersprungen: Der Batch
+    // läuft in einer Transaktion, eine kaputte Zeile bräche sonst den
+    // ganzen Abschnitt ab (obwohl der Restore Einzelwerte überspringen soll).
+    final sessionMaps = sectionMaps(snapshot['chatSessions']);
+    final sessionIds = <String>{
+      for (final s in sessionMaps)
+        if (reqStr(s, 'id') case final String id) id,
+    };
+    if (sessionMaps.isNotEmpty) {
       await db.batch((b) {
         b.insertAll(
           db.chatSessions,
           [
-            for (final s in sessions.whereType<Map>())
+            for (final s in sessionMaps)
               if (reqStr(s, 'id') case final String id)
                 ChatSessionsCompanion(
                   id: Value(id),
@@ -308,17 +322,24 @@ final class SettingsBackup {
         );
       });
     }
-    final messages = snapshot['chatMessages'];
-    if (messages is List) {
+    final messageMaps = [
+      for (final m in sectionMaps(snapshot['chatMessages']))
+        if (reqStr(m, 'id') != null &&
+            sessionIds.contains(reqStr(m, 'sessionId')))
+          m,
+    ];
+    final messageIds = <String>{
+      for (final m in messageMaps) reqStr(m, 'id') as String,
+    };
+    if (messageMaps.isNotEmpty) {
       await db.batch((b) {
         b.insertAll(
           db.chatMessages,
           [
-            for (final m in messages.whereType<Map>())
-              if (reqStr(m, 'id') case final String id)
-                ChatMessagesCompanion(
-                  id: Value(id),
-                  sessionId: Value(m['sessionId'] as String? ?? ''),
+            for (final m in messageMaps)
+              ChatMessagesCompanion(
+                id: Value(reqStr(m, 'id') as String),
+                sessionId: Value(reqStr(m, 'sessionId') as String),
                   role: Value(m['role'] as String? ?? ''),
                   content: Value(m['content'] as String? ?? ''),
                   createdAt: Value(reqInt(m, 'createdAt')),
@@ -335,14 +356,15 @@ final class SettingsBackup {
         );
       });
     }
-    final toolCalls = snapshot['chatToolCalls'];
-    if (toolCalls is List) {
+    final toolCallMaps = sectionMaps(snapshot['chatToolCalls']);
+    if (toolCallMaps.isNotEmpty) {
       await db.batch((b) {
         b.insertAll(
           db.assistantToolCalls,
           [
-            for (final c in toolCalls.whereType<Map>())
-              if (reqStr(c, 'messageId') case final String messageId)
+            for (final c in toolCallMaps)
+              if (reqStr(c, 'messageId') case final String messageId
+                  when messageIds.contains(messageId))
                 AssistantToolCallsCompanion(
                   messageId: Value(messageId),
                   seq: Value(reqInt(c, 'seq')),
