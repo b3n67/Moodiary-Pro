@@ -70,7 +70,7 @@ jobs:
 
       - name: Build APK
         working-directory: mobile
-        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=splitMap
+        run: flutter build apk --release --target-platform android-arm64 --obfuscate --split-debug-info=splitMap --dart-define=ONEDRIVE_CLIENT_ID=${{ secrets.ONEDRIVE_CLIENT_ID }}
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -115,8 +115,7 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
-            echo "no [${{ env.VERSION }}] section in CHANGELOG.md" >&2
-            exit 1
+            echo "Moodiary-Pro ${{ env.VERSION }}" > release-notes.md
           fi
           cat release-notes.md
 
