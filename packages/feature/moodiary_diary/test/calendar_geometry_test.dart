@@ -15,6 +15,27 @@ void main() {
       expect(monthGeometry(DateTime(2026, 6)).leading, 1);
     });
 
+    test('周一起始：1 号是周一时前面不空格', () {
+      expect(
+        monthGeometry(DateTime(2026, 6), weekStart: DateTime.monday).leading,
+        0,
+      );
+    });
+
+    test('周一起始：1 号是周日时前面空六格', () {
+      expect(
+        monthGeometry(DateTime(2026, 2), weekStart: DateTime.monday).leading,
+        6,
+      );
+    });
+
+    test('周一起始：1 号是周六时前面空五格', () {
+      expect(
+        monthGeometry(DateTime(2026, 8), weekStart: DateTime.monday).leading,
+        5,
+      );
+    });
+
     test('天数覆盖 30 / 31 / 平年二月 / 闰年二月', () {
       expect(monthGeometry(DateTime(2026, 4)).days, 30);
       expect(monthGeometry(DateTime(2026, 8)).days, 31);

@@ -26,6 +26,9 @@ class MHeatmap extends StatefulWidget {
 
   final String semanticsLabel;
 
+  /// DateTime.weekday-Konvention (Mo=1..So=7), Standard: Sonntag
+  final int weekStart;
+
   const MHeatmap({
     super.key,
     required this.endDate,
@@ -35,6 +38,7 @@ class MHeatmap extends StatefulWidget {
     this.weeks = 53,
     this.selected,
     this.onDaySelected,
+    this.weekStart = DateTime.sunday,
   });
 
   static Color levelColor(BuildContext context, int level) {
@@ -59,12 +63,14 @@ class _MHeatmapState extends State<MHeatmap> {
   static DateTime _addDays(DateTime d, int n) =>
       DateTime(d.year, d.month, d.day + n);
 
-  static DateTime _weekStart(DateTime d) => _addDays(d, -(d.weekday % 7));
+  static DateTime _weekStart(DateTime d, int weekStart) =>
+      _addDays(d, -((d.weekday - weekStart + 7) % 7));
 
   @override
   Widget build(BuildContext context) {
     final firstColumn = _weekStart(
       _addDays(widget.endDate, -(widget.weeks - 1) * 7),
+      widget.weekStart,
     );
     final contentWidth = widget.weeks * _kSlotSize;
 

@@ -38,6 +38,24 @@ SystemUiOverlayStyle systemOverlayStyleOf(Brightness brightness) {
   );
 }
 
+/// Zieht im Dunkelmodus alle Flächen auf echtes Schwarz (AMOLED spart
+/// Strom, weil schwarze Pixel aus sind). Text-/Akzentfarben bleiben.
+ColorScheme _amoledScheme(ColorScheme cs) {
+  const black = Color(0xFF000000);
+  return cs.copyWith(
+    surface: black,
+    surfaceDim: black,
+    surfaceBright: black,
+    surfaceContainerLowest: black,
+    surfaceContainerLow: black,
+    surfaceContainer: black,
+    surfaceContainerHigh: black,
+    surfaceContainerHighest: black,
+    shadow: black,
+    scrim: black,
+  );
+}
+
 ThemeData buildMuiTheme({
   required Brightness brightness,
   MuiAccent accent = const MuiAccent.neutral(),
@@ -50,8 +68,12 @@ ThemeData buildMuiTheme({
   MuiStateTokens states = const MuiStateTokens(),
   Color onMedia = const Color(0xFFFFFFFF),
   Color? success,
+  bool amoled = false,
 }) {
-  final cs = resolveColorScheme(brightness, accent);
+  final resolved = resolveColorScheme(brightness, accent);
+  final cs = amoled && brightness == Brightness.dark
+      ? _amoledScheme(resolved)
+      : resolved;
   final text = buildTextTheme(font, cs.onSurface);
 
   final tokens = MuiTokens(

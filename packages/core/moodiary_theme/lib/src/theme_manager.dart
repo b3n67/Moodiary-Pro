@@ -23,7 +23,8 @@ class ThemeManager {
       _lightTheme ?? buildMuiTheme(brightness: Brightness.light);
 
   ThemeData get darkTheme =>
-      _darkTheme ?? buildMuiTheme(brightness: Brightness.dark);
+      _darkTheme ??
+      buildMuiTheme(brightness: Brightness.dark, amoled: _amoled());
 
   Color? get systemAccentSeed => _systemSeed;
 
@@ -110,12 +111,17 @@ class ThemeManager {
       brightness: Brightness.dark,
       accent: accent,
       font: font,
+      amoled: _amoled(),
     );
   }
 
+  bool _amoled() => MoodiaryKVs.amoledBlack.get() ?? false;
+
   ThemeData exportTheme(Brightness brightness) => buildMuiTheme(
     brightness: brightness,
+    accent: resolveAccent(),
     font: MuiFontConfig(family: fontFamily, wghtAxis: wghtAxisMap),
+    amoled: brightness == Brightness.dark && _amoled(),
   );
 
   MuiAccent resolveAccent() {

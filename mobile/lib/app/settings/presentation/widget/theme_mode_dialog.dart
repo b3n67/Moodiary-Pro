@@ -33,6 +33,22 @@ class ThemeModeDialog extends ConsumerWidget {
               label: context.l10n.app.themeModeDark,
               onTap: () => _select(context, ref, 2),
             ),
+            ValueListenableBuilder<bool>(
+              valueListenable: MoodiaryKVs.amoledBlack.getNotifier(),
+              builder: (context, amoled, _) {
+                return SwitchListTile(
+                  title: Text(context.l10n.app.amoledTitle),
+                  subtitle: Text(context.l10n.app.amoledSubtitle),
+                  value: amoled,
+                  onChanged: (v) async {
+                    MoodiaryKVs.amoledBlack.set(v);
+                    await ref
+                        .read(appSettingsControllerProvider.notifier)
+                        .bumpTheme();
+                  },
+                );
+              },
+            ),
           ],
         );
       },

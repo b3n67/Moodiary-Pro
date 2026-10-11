@@ -139,6 +139,7 @@ Future<void> _generate(
 }
 
 Future<List<_Entry>> _rust(Uri rustDir) async {
+  final tmpFile = File.fromUri(rustDir.resolve('.cargo-about-output.json'));
   final ProcessResult proc;
   try {
     proc = await Process.run('cargo', [
@@ -146,6 +147,8 @@ Future<List<_Entry>> _rust(Uri rustDir) async {
       'generate',
       '--format',
       'json',
+      '-o',
+      tmpFile.path,
     ], workingDirectory: rustDir.toFilePath());
   } on ProcessException {
     throw StateError('cargo not found on PATH; install rustup.');
@@ -158,8 +161,12 @@ Future<List<_Entry>> _rust(Uri rustDir) async {
     );
   }
 
+  final jsonString = await tmpFile.readAsString();
+  try {
+    await tmpFile.delete();
+  } catch (_) {}
   final licenses =
-      (jsonDecode(proc.stdout as String) as Map<String, dynamic>)['licenses']
+      (jsonDecode(jsonString) as Map<String, dynamic>)['licenses']
           as List;
   return [
     for (final l in licenses.cast<Map<String, dynamic>>())

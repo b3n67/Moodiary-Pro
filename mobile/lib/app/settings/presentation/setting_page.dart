@@ -9,6 +9,7 @@ import 'package:moodiary_mobile/app/settings/presentation/widget/data_repair_til
 import 'package:moodiary_mobile/app/settings/presentation/widget/image_optimize_tile.dart';
 import 'package:moodiary_mobile/app/settings/presentation/widget/language_dialog.dart';
 import 'package:moodiary_mobile/app/settings/presentation/widget/theme_mode_dialog.dart';
+import 'package:moodiary_mobile/app/settings/presentation/widget/week_start_dialog.dart';
 import 'package:moodiary_mobile/app/settings/setting_routes.dart';
 import 'package:moodiary_preferences/moodiary_preferences.dart';
 import 'package:moodiary_router/moodiary_router.dart';
@@ -114,8 +115,7 @@ class _DisplaySection extends ConsumerWidget {
         ),
         ValueListenableBuilder(
           valueListenable: MoodiaryKVs.themeAccentMode.getNotifier(),
-          builder: (context, index, _) {
-            final mode = index >= 0 && index < ThemeAccentMode.values.length
+          builder: (context, index, _) {            final mode = index >= 0 && index < ThemeAccentMode.values.length
                 ? ThemeAccentMode.values[index]
                 : ThemeAccentMode.neutral;
             return SettingListTile(
@@ -135,6 +135,26 @@ class _DisplaySection extends ConsumerWidget {
           leading: _lead(context, LucideIcons.type),
           trailing: _chevron(context),
           onTap: () => _openSetting(context, const FontRoute()),
+        ),
+        ValueListenableBuilder(
+          valueListenable: MoodiaryKVs.weekStart.getNotifier(),
+          builder: (context, stored, _) {
+            final monday = stored != DateTime.sunday;
+            return SettingListTile(
+              title: context.l10n.app.weekStart,
+              leading: _lead(context, LucideIcons.calendar),
+              trailing: _value(
+                context,
+                monday
+                    ? context.l10n.app.weekStartMonday
+                    : context.l10n.app.weekStartSunday,
+              ),
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => const WeekStartDialog(),
+              ),
+            );
+          },
         ),
       ],
     );

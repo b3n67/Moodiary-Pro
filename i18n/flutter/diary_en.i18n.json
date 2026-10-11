@@ -20,6 +20,7 @@
   "searchHistoryEmpty": "No search history yet",
   "viewModeTimeline": "Timeline",
   "viewModeFeed": "Feed",
+  "viewModeCalendar": "Calendar",
   "linkNotFound": "Diary not found or deleted",
   "knowledgeGraph": "Knowledge Graph",
   "graphCount": "{nodes} notes · {edges} links",

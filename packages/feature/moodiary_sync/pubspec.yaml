@@ -39,6 +39,8 @@ dependencies:
   bonsoir: 7.1.5
   path: 1.9.1
   pool: 1.5.3
+  drift: 2.35.0
+  crypto: 3.0.7
   synchronized: 3.4.1+2
   meta: 1.19.0
   url_launcher: 6.3.2

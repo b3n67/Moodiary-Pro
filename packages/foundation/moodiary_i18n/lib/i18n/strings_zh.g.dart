@@ -112,6 +112,15 @@ class Translations$app$zh {
 	/// zh: 'Deutsch'
 	String get languageGerman => 'Deutsch';
 
+	/// zh: '每周起始日'
+	String get weekStart => '每周起始日';
+
+	/// zh: '周一'
+	String get weekStartMonday => '周一';
+
+	/// zh: '周日'
+	String get weekStartSunday => '周日';
+
 	/// zh: '设置'
 	String get settingsTitle => '设置';
 
@@ -171,6 +180,12 @@ class Translations$app$zh {
 
 	/// zh: '深色'
 	String get themeModeDark => '深色';
+
+	/// zh: 'AMOLED 纯黑'
+	String get amoledTitle => 'AMOLED 纯黑';
+
+	/// zh: '深色模式下使用纯黑背景，在 OLED 屏幕上更省电'
+	String get amoledSubtitle => '深色模式下使用纯黑背景，在 OLED 屏幕上更省电';
 
 	/// zh: '已选 {count}'
 	String homeSelected({required Object count}) => '已选 ${count}';
@@ -643,6 +658,15 @@ class Translations$assistant$zh {
 	/// zh: '助手设置'
 	String get menuSettings => '助手设置';
 
+	/// zh: '重命名对话'
+	String get menuRename => '重命名对话';
+
+	/// zh: '重命名对话'
+	String get renameTitle => '重命名对话';
+
+	/// zh: '名称'
+	String get renameLabel => '名称';
+
 	/// zh: '已压缩较早的消息'
 	String get compactedNow => '已压缩较早的消息';
 
@@ -825,6 +849,60 @@ class Translations$assistant$zh {
 
 	/// zh: '助手记下的所有事都会被永久删除，无法恢复。'
 	String get memoryClearMessage => '助手记下的所有事都会被永久删除，无法恢复。';
+
+	/// zh: '提示词'
+	String get promptSectionTitle => '提示词';
+
+	/// zh: '还没有提示词——新建一个吧，比如写日记或翻译'
+	String get promptEmpty => '还没有提示词——新建一个吧，比如写日记或翻译';
+
+	/// zh: '新建提示词'
+	String get promptAdd => '新建提示词';
+
+	/// zh: '编辑提示词'
+	String get promptEdit => '编辑提示词';
+
+	/// zh: '名称'
+	String get promptNameLabel => '名称';
+
+	/// zh: '比如日记教练'
+	String get promptNameHint => '比如日记教练';
+
+	/// zh: '指令'
+	String get promptContentLabel => '指令';
+
+	/// zh: '这个提示词下助手要遵守什么……'
+	String get promptContentHint => '这个提示词下助手要遵守什么……';
+
+	/// zh: '删除这个提示词？'
+	String get promptDeleteTitle => '删除这个提示词？';
+
+	/// zh: '「{name}」会被删除。正在进行的对话下次发送前还会用它。'
+	String promptDeleteMessage({required Object name}) => '「${name}」会被删除。正在进行的对话下次发送前还会用它。';
+
+	/// zh: '无提示词'
+	String get promptNone => '无提示词';
+
+	/// zh: '选择提示词'
+	String get promptSwitchTitle => '选择提示词';
+
+	/// zh: '使用中'
+	String get promptActive => '使用中';
+
+	/// zh: '内置'
+	String get presetBuiltIn => '内置';
+
+	/// zh: 'Moodiary Assistant'
+	String get presetFactoryName => 'Moodiary Assistant';
+
+	/// zh: '出厂预设：温暖踏实的日记伙伴。'
+	String get presetFactoryDesc => '出厂预设：温暖踏实的日记伙伴。';
+
+	/// zh: '派生副本'
+	String get presetDeriveCopy => '派生副本';
+
+	/// zh: '{name}（副本）'
+	String promptCopyName({required Object name}) => '${name}（副本）';
 
 	/// zh: '全部清空'
 	String get memoryClearConfirm => '全部清空';
@@ -1116,6 +1194,24 @@ class Translations$assistant$zh {
 
 	/// zh: '无匹配模型'
 	String get modelProviderNoModelMatch => '无匹配模型';
+
+	/// zh: '免费（0 美元）'
+	String get modelFilterFree => '免费（0 美元）';
+
+	/// zh: '可调推理'
+	String get modelFilterReasoning => '可调推理';
+
+	/// zh: '排序'
+	String get modelSortLabel => '排序';
+
+	/// zh: '默认'
+	String get modelSortStandard => '默认';
+
+	/// zh: '名称'
+	String get modelSortName => '名称';
+
+	/// zh: '价格'
+	String get modelSortPrice => '价格';
 
 	/// zh: '去填写'
 	String get modelProviderFillKey => '去填写';
@@ -1492,8 +1588,8 @@ class Translations$common$zh {
 	/// zh: '关闭'
 	String get close => '关闭';
 
-	/// zh: 'Moodiary'
-	String get appName => 'Moodiary';
+	/// zh: 'Moodiary+'
+	String get appName => 'Moodiary+';
 
 	/// zh: '已配置'
 	String get configured => '已配置';
@@ -1575,6 +1671,9 @@ class Translations$diary$zh {
 
 	/// zh: '信息流'
 	String get viewModeFeed => '信息流';
+
+	/// zh: '日历'
+	String get viewModeCalendar => '日历';
 
 	/// zh: '日记不存在或已删除'
 	String get linkNotFound => '日记不存在或已删除';
@@ -3813,14 +3912,8 @@ class Translations$sync$zh {
 	/// zh: 'Microsoft OneDrive'
 	String get backupSyncOnedrive => 'Microsoft OneDrive';
 
-	/// zh: '客户端 ID（Azure 应用）'
-	String get onedriveOptionClientId => '客户端 ID（Azure 应用）';
-
 	/// zh: '已登录'
 	String get onedriveOptionSignedIn => '已登录';
-
-	/// zh: '已退出'
-	String get onedriveOptionSignedOut => '已退出';
 
 	/// zh: '使用 Microsoft 登录'
 	String get onedriveSignIn => '使用 Microsoft 登录';
@@ -3837,26 +3930,8 @@ class Translations$sync$zh {
 	/// zh: '与 OneDrive 的同步将停止。本设备上的日记不受影响。'
 	String get onedriveSignOutConfirmMessage => '与 OneDrive 的同步将停止。本设备上的日记不受影响。';
 
-	/// zh: 'Azure 应用注册的应用程序（客户端）ID'
-	String get onedriveClientIdHint => 'Azure 应用注册的应用程序（客户端）ID';
-
-	/// zh: '需要客户端 ID'
-	String get onedriveClientIdRequired => '需要客户端 ID';
-
 	/// zh: 'Microsoft 登录失败：{error}'
 	String onedriveAuthFailed({required Object error}) => 'Microsoft 登录失败：${error}';
-
-	/// zh: '登录已过期，请重新登录'
-	String get onedriveTokenExpired => '登录已过期，请重新登录';
-
-	/// zh: '设置 OneDrive'
-	String get onedriveSetupGuideTitle => '设置 OneDrive';
-
-	/// zh: '在 Azure 门户（免费）注册一个应用（应用注册 → 新注册），账户类型选“任何组织和个人 Microsoft 账户”，重定向 URI 填 http://localhost。然后添加 API 权限“Microsoft Graph → Files.ReadWrite.All”，并把客户端 ID 填到这里。'
-	String get onedriveSetupGuideMessage => '在 Azure 门户（免费）注册一个应用（应用注册 → 新注册），账户类型选“任何组织和个人 Microsoft 账户”，重定向 URI 填 http://localhost。然后添加 API 权限“Microsoft Graph → Files.ReadWrite.All”，并把客户端 ID 填到这里。';
-
-	/// zh: '打开 Azure 门户'
-	String get onedriveSetupGuideOpen => '打开 Azure 门户';
 
 	/// zh: '请先使用 Microsoft 登录'
 	String get onedriveNotSignedIn => '请先使用 Microsoft 登录';
@@ -3864,11 +3939,20 @@ class Translations$sync$zh {
 	/// zh: '无法读取 OneDrive'
 	String get onedriveDriveError => '无法读取 OneDrive';
 
-	/// zh: '该文件已存在于 OneDrive'
-	String get onedriveUploadConflict => '该文件已存在于 OneDrive';
+	/// zh: '无法解析微软服务器（DNS）。请检查本机的专用 DNS、VPN 或 DNS/广告拦截应用，然后重试。'
+	String get onedriveDnsFailed => '无法解析微软服务器（DNS）。请检查本机的专用 DNS、VPN 或 DNS/广告拦截应用，然后重试。';
 
 	/// zh: '请先完成 OneDrive 配置'
 	String get errOnedriveConfig => '请先完成 OneDrive 配置';
+
+	/// zh: '客户端 ID（Azure 应用）'
+	String get onedriveOptionClientId => '客户端 ID（Azure 应用）';
+
+	/// zh: 'Azure 应用注册的应用程序（客户端）ID'
+	String get onedriveClientIdHint => 'Azure 应用注册的应用程序（客户端）ID';
+
+	/// zh: '需要客户端 ID'
+	String get onedriveClientIdRequired => '需要客户端 ID';
 }
 
 // Path: ui

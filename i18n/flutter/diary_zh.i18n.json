@@ -20,6 +20,7 @@
   "searchHistoryEmpty": "暂无搜索历史",
   "viewModeTimeline": "时间线",
   "viewModeFeed": "信息流",
+  "viewModeCalendar": "日历",
   "linkNotFound": "日记不存在或已删除",
   "knowledgeGraph": "知识图谱",
   "graphCount": "{nodes} 篇 · {edges} 条链接",

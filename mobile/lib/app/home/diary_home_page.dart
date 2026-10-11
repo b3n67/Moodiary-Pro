@@ -36,6 +36,7 @@ class _DiaryListViewState extends ConsumerState<_DiaryListView> {
                 child: switch (viewModeType) {
                   .timeline => DiaryTimelineView(filter: filter, sort: sort),
                   .feed => DiaryFeedView(filter: filter, sort: sort),
+                  .calendar => const CalendarPage(),
                 },
               ),
             );
@@ -128,6 +129,7 @@ class _DiaryListViewState extends ConsumerState<_DiaryListView> {
               icon: Icon(switch (viewModeType) {
                 .timeline => LucideIcons.gitCommitVertical,
                 .feed => LucideIcons.layoutList,
+                .calendar => LucideIcons.calendar,
               }),
               onPressed: () => ViewModeSheet.show(context),
             );

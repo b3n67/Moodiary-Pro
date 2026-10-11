@@ -6,6 +6,7 @@ import 'package:moodiary_files/moodiary_files.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_models/moodiary_models.dart';
 import 'package:moodiary_router/moodiary_router.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
@@ -25,9 +26,12 @@ const double _kCellMaxTextScale = 1.15;
 const double _kHeaderHeight = 18;
 
 @visibleForTesting
-({int leading, int days}) monthGeometry(DateTime month) => (
-  // weekday 是周一=1..周日=7，% 7 折成周日=0
-  leading: DateTime(month.year, month.month).weekday % 7,
+({int leading, int days}) monthGeometry(
+  DateTime month, {
+  int weekStart = DateTime.sunday,
+}) => (
+  // weekday 是周一=1..周日=7，减去周起始日再对 7 取模
+  leading: (DateTime(month.year, month.month).weekday - weekStart + 7) % 7,
   // 下个月第 0 天 = 本月最后一天，跨年/闰年由 DateTime 自动归一
   days: DateTime(month.year, month.month + 1, 0).day,
 );
@@ -160,16 +164,30 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
             onPrev: () => _goToPage(_pageForMonth(_month) - 1),
             onNext: () => _goToPage(_pageForMonth(_month) + 1),
           ),
-          const _WeekdayHeader(),
-          _MonthPager(
-            controller: _pageCtl,
-            byDay: byDay,
-            selected: _selected,
-            today: _today(),
-            monthForPage: _monthForPage,
-            onPageChanged: _onPageChanged,
-            onSettled: _onSettled,
-            onSelect: (d) => setState(() => _selected = d),
+          ValueListenableBuilder(
+            valueListenable: MoodiaryKVs.weekStart.getNotifier(),
+            builder: (context, stored, _) {
+              final weekStart = stored == DateTime.sunday
+                  ? DateTime.sunday
+                  : DateTime.monday;
+              return Column(
+                mainAxisSize: .min,
+                children: [
+                  _WeekdayHeader(weekStart: weekStart),
+                  _MonthPager(
+                    controller: _pageCtl,
+                    byDay: byDay,
+                    selected: _selected,
+                    today: _today(),
+                    monthForPage: _monthForPage,
+                    onPageChanged: _onPageChanged,
+                    onSettled: _onSettled,
+                    onSelect: (d) => setState(() => _selected = d),
+                    weekStart: weekStart,
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Expanded(
@@ -235,11 +253,16 @@ class _MonthBar extends StatelessWidget {
 }
 
 class _WeekdayHeader extends StatelessWidget {
-  const _WeekdayHeader();
+  final int weekStart;
+
+  const _WeekdayHeader({required this.weekStart});
 
   @override
   Widget build(BuildContext context) {
-    final sunday = DateTime(2026, 8, 2);
+    // 2026-08-02 是周日，2026-08-03 是周一：按周起始日排头
+    final first = weekStart == DateTime.monday
+        ? DateTime(2026, 8, 3)
+        : DateTime(2026, 8, 2);
     return Padding(
       padding: const .symmetric(horizontal: _kGridPadding),
       child: Row(
@@ -247,7 +270,7 @@ class _WeekdayHeader extends StatelessWidget {
           for (var i = 0; i < 7; i++)
             Expanded(
               child: Text(
-                TimeFormat.weekdayShort(sunday.add(Duration(days: i))),
+                TimeFormat.weekdayShort(first.add(Duration(days: i))),
                 textAlign: .center,
                 maxLines: 1,
                 style: context.theme.typography.labelSmall.onSurfaceVariant,
@@ -268,6 +291,7 @@ class _MonthPager extends StatelessWidget {
   final ValueChanged<int> onPageChanged;
   final VoidCallback onSettled;
   final ValueChanged<DateTime> onSelect;
+  final int weekStart;
 
   const _MonthPager({
     required this.controller,
@@ -278,6 +302,7 @@ class _MonthPager extends StatelessWidget {
     required this.onPageChanged,
     required this.onSettled,
     required this.onSelect,
+    required this.weekStart,
   });
 
   @override
@@ -306,6 +331,7 @@ class _MonthPager extends StatelessWidget {
                 selected: selected,
                 today: today,
                 onSelect: onSelect,
+                weekStart: weekStart,
               ),
             ),
           ),
@@ -321,6 +347,7 @@ class _MonthGrid extends StatelessWidget {
   final DateTime selected;
   final DateTime today;
   final ValueChanged<DateTime> onSelect;
+  final int weekStart;
 
   const _MonthGrid({
     required this.month,
@@ -328,11 +355,12 @@ class _MonthGrid extends StatelessWidget {
     required this.selected,
     required this.today,
     required this.onSelect,
+    required this.weekStart,
   });
 
   @override
   Widget build(BuildContext context) {
-    final (:leading, :days) = monthGeometry(month);
+    final (:leading, :days) = monthGeometry(month, weekStart: weekStart);
 
     return Padding(
       padding: const .symmetric(horizontal: _kGridPadding, vertical: 4),

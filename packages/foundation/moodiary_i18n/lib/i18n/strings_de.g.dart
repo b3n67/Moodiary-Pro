@@ -73,6 +73,9 @@ class _Translations$app$de extends Translations$app$zh {
 	@override String get languageSimplifiedChinese => '简体中文';
 	@override String get languageEnglish => 'English';
 	@override String get languageGerman => 'Deutsch';
+	@override String get weekStart => 'Wochenbeginn';
+	@override String get weekStartMonday => 'Montag';
+	@override String get weekStartSunday => 'Sonntag';
 	@override String get settingsTitle => 'Einstellungen';
 	@override String get sectionData => 'Daten';
 	@override String get recycle => 'Papierkorb';
@@ -93,6 +96,8 @@ class _Translations$app$de extends Translations$app$zh {
 	@override String get themeModeSystem => 'Dem System folgen';
 	@override String get themeModeLight => 'Hell';
 	@override String get themeModeDark => 'Dunkel';
+	@override String get amoledTitle => 'AMOLED-Schwarz';
+	@override String get amoledSubtitle => 'Im Dunkelmodus echte schwarze Flächen — spart auf OLED-Displays Strom';
 	@override String homeSelected({required Object count}) => '${count} ausgewählt';
 	@override String get homeDeleteTitle => 'Die ausgewählten Einträge löschen?';
 	@override String homeDeleteMessage({required Object count}) => '${count} Einträge werden in den Papierkorb verschoben, von dort kannst du sie wiederherstellen.';
@@ -256,6 +261,9 @@ class _Translations$assistant$de extends Translations$assistant$zh {
 	@override String get newChat => 'Neuer Chat';
 	@override String get menuCompactNow => 'Verlauf kompaktieren';
 	@override String get menuSettings => 'Einstellungen des Assistenten';
+	@override String get menuRename => 'Chat umbenennen';
+	@override String get renameTitle => 'Chat umbenennen';
+	@override String get renameLabel => 'Name';
 	@override String get compactedNow => 'Ältere Nachrichten wurden kompaktiert';
 	@override String get compactNothing => 'Nichts zu kompaktieren';
 	@override String get compactFailed => 'Kompaktierung fehlgeschlagen, später erneut versuchen';
@@ -317,6 +325,24 @@ class _Translations$assistant$de extends Translations$assistant$zh {
 	@override String memoryDeleteMessage({required Object text}) => '„${text}“ wird unwiderruflich gelöscht und der Assistent wird sich nicht mehr daran erinnern.';
 	@override String get memoryClearTitle => 'Alle Erinnerungen löschen?';
 	@override String get memoryClearMessage => 'Alles, was der Assistent gespeichert hat, wird unwiderruflich gelöscht. Dies kann nicht rückgängig gemacht werden.';
+	@override String get promptSectionTitle => 'Prompts';
+	@override String get promptEmpty => 'Keine Prompts — lege einen an, z. B. fürs Tagebuch-Schreiben oder Übersetzungen';
+	@override String get promptAdd => 'Prompt anlegen';
+	@override String get promptEdit => 'Prompt bearbeiten';
+	@override String get promptNameLabel => 'Name';
+	@override String get promptNameHint => 'z. B. Tagebuch-Coach';
+	@override String get promptContentLabel => 'Anweisung';
+	@override String get promptContentHint => 'Was der Assistent bei diesem Prompt beachten soll …';
+	@override String get promptDeleteTitle => 'Diesen Prompt löschen?';
+	@override String promptDeleteMessage({required Object name}) => '„${name}“ wird gelöscht. Laufende Gespräche nutzen ihn noch bis zum nächsten Senden.';
+	@override String get promptNone => 'Kein Prompt';
+	@override String get promptSwitchTitle => 'Prompt wählen';
+	@override String get promptActive => 'Aktiv';
+	@override String get presetBuiltIn => 'Integriert';
+	@override String get presetFactoryName => 'Moodiary Assistant';
+	@override String get presetFactoryDesc => 'Das Werks-Preset: ein warmer, bodenständiger Tagebuch-Begleiter.';
+	@override String get presetDeriveCopy => 'Kopie ableiten';
+	@override String promptCopyName({required Object name}) => '${name} (Kopie)';
 	@override String get memoryClearConfirm => 'Alle löschen';
 	@override String get memoryEdit => 'Bearbeiten';
 	@override String get memoryEditTitle => 'Erinnerung bearbeiten';
@@ -414,6 +440,12 @@ class _Translations$assistant$de extends Translations$assistant$zh {
 	@override String get modelProviderCapabilitiesHint => 'Aktiviere, was dieses Modell unterstützt — steuert Werkzeuge, Nachdenken und Bildversand.';
 	@override String get modelProviderSearchModelHint => 'Modelle suchen';
 	@override String get modelProviderNoModelMatch => 'Keine passenden Modelle';
+	@override String get modelFilterFree => 'Kostenlos (0 \$)';
+	@override String get modelFilterReasoning => 'Reasoning einstellbar';
+	@override String get modelSortLabel => 'Sortierung';
+	@override String get modelSortStandard => 'Standard';
+	@override String get modelSortName => 'Name';
+	@override String get modelSortPrice => 'Preis';
 	@override String get modelProviderFillKey => 'Schlüssel hinzufügen';
 	@override String get modelProviderManage => 'Anbieter verwalten';
 	@override String get modelCatalogMissing => 'Noch kein Modellkatalog';
@@ -545,7 +577,7 @@ class _Translations$common$de extends Translations$common$zh {
 	@override String categoryCount({required Object count}) => '${count} Kategorien';
 	@override String get fileName => 'Dateiname';
 	@override String get close => 'Schließen';
-	@override String get appName => 'Moodiary';
+	@override String get appName => 'Moodiary+';
 	@override String get configured => 'Konfiguriert';
 	@override String get notConfigured => 'Nicht konfiguriert';
 	@override String get copied => 'In die Zwischenablage kopiert';
@@ -579,6 +611,7 @@ class _Translations$diary$de extends Translations$diary$zh {
 	@override String get searchHistoryEmpty => 'Noch kein Suchverlauf';
 	@override String get viewModeTimeline => 'Zeitleiste';
 	@override String get viewModeFeed => 'Feed';
+	@override String get viewModeCalendar => 'Kalender';
 	@override String get linkNotFound => 'Tagebuch nicht gefunden oder gelöscht';
 	@override String get knowledgeGraph => 'Wissensgraph';
 	@override String graphCount({required Object nodes, required Object edges}) => '${nodes} Notizen · ${edges} Verknüpfungen';
@@ -1376,25 +1409,20 @@ class _Translations$sync$de extends Translations$sync$zh {
 	@override String get logHealth => 'Verbindung';
 	@override String lastSuccess({required Object time}) => 'letzter Erfolg ${time}';
 	@override String get backupSyncOnedrive => 'Microsoft OneDrive';
-	@override String get onedriveOptionClientId => 'Client-ID (Azure-App)';
 	@override String get onedriveOptionSignedIn => 'Angemeldet';
-	@override String get onedriveOptionSignedOut => 'Abgemeldet';
 	@override String get onedriveSignIn => 'Mit Microsoft anmelden';
 	@override String get onedriveSignInSubtitle => 'Melde dich in einem Browserfenster an und genehmige den Zugriff';
 	@override String get onedriveSignOut => 'Abmelden';
 	@override String get onedriveSignOutConfirmTitle => 'Von OneDrive abmelden?';
 	@override String get onedriveSignOutConfirmMessage => 'Die Synchronisierung mit OneDrive stoppt. Tagebücher auf diesem Gerät bleiben unberührt.';
-	@override String get onedriveClientIdHint => 'Die Anwendungs-ID (Client) deiner Azure-App-Registrierung';
-	@override String get onedriveClientIdRequired => 'Die Client-ID ist erforderlich';
 	@override String onedriveAuthFailed({required Object error}) => 'Microsoft-Anmeldung fehlgeschlagen: ${error}';
-	@override String get onedriveTokenExpired => 'Die Anmeldung ist abgelaufen, melde dich erneut an';
-	@override String get onedriveSetupGuideTitle => 'OneDrive einrichten';
-	@override String get onedriveSetupGuideMessage => 'Registriere eine kostenlose App im Azure-Portal (App-Registrierungen → Neue Registrierung), mit „Konten in beliebigen Organisationen und persönlichen Microsoft-Konten“ und der Umleitungs-URI http://localhost. Füge dann die API-Berechtigung „Microsoft Graph → Files.ReadWrite.All“ hinzu und trage hier die Client-ID ein.';
-	@override String get onedriveSetupGuideOpen => 'Azure-Portal öffnen';
 	@override String get onedriveNotSignedIn => 'Melde dich zuerst mit Microsoft an';
 	@override String get onedriveDriveError => 'OneDrive-Laufwerk konnte nicht gelesen werden';
-	@override String get onedriveUploadConflict => 'Die Datei existiert bereits auf OneDrive';
+	@override String get onedriveDnsFailed => 'Microsoft-Server nicht erreichbar (DNS). Prüfe auf diesem Gerät Privates DNS, VPN oder DNS-/Werbeblocker-Apps und versuche es erneut.';
 	@override String get errOnedriveConfig => 'Schließe zuerst die OneDrive-Konfiguration ab';
+	@override String get onedriveOptionClientId => 'Client-ID (Azure-App)';
+	@override String get onedriveClientIdHint => 'Die Anwendungs-ID (Client) deiner Azure-App-Registrierung';
+	@override String get onedriveClientIdRequired => 'Die Client-ID ist erforderlich';
 }
 
 // Path: ui

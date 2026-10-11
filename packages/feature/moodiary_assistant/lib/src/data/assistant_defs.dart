@@ -381,6 +381,7 @@ String buildStableSystemPrompt({
   required bool toolsEnabled,
   required bool memoryEnabled,
   String userNotes = '',
+  String activePrompt = '',
   bool confirmsWrites = false,
 }) {
   final guardrails = _guardrailsTemplate.replaceFirst(
@@ -388,6 +389,7 @@ String buildStableSystemPrompt({
     confirmsWrites ? _toolsMayPause : _toolsRunFreely,
   );
   final notes = userNotes.trim();
+  final prompt = activePrompt.trim();
   return assembleSystemPrompt([
     (name: 'harness:identity', order: -100, text: _identityLayer),
     (name: 'harness:guardrails', order: -50, text: guardrails),
@@ -400,6 +402,8 @@ String buildStableSystemPrompt({
             : _retrievalPolicyWithoutMemory,
       ),
     (name: 'harness:persona', order: 0, text: _personaLayer),
+    if (prompt.isNotEmpty)
+      (name: 'user:prompt', order: 10, text: prompt),
     if (notes.isNotEmpty)
       (name: 'user:notes', order: 25, text: '$_notesFraming\n\n$notes'),
     if (toolsEnabled)
@@ -411,6 +415,7 @@ String buildTurnContext({
   required DateTime nowLocal,
   int? factCount,
   bool semanticSearch = false,
+  List<String> attachedImages = const [],
 }) {
   final buffer = StringBuffer()
     ..write("(Context for this turn — not part of the user's message.)\n")
@@ -423,6 +428,12 @@ String buildTurnContext({
       ..write(factCount)
       ..write(' · semantic diary search: ')
       ..write(semanticSearch ? 'on' : 'off (keyword search only)')
+      ..write('.');
+  }
+  if (attachedImages.isNotEmpty) {
+    buffer
+      ..write('\nImages attached to this turn (filenames for diary tools): ')
+      ..write(attachedImages.join(', '))
       ..write('.');
   }
   return buffer.toString();

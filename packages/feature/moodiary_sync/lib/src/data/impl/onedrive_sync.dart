@@ -6,10 +6,10 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:injectable/injectable.dart';
-import 'package:moodiary_http/moodiary_http.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_sync/src/data/model/sync_provider.dart';
 import 'package:moodiary_sync/src/data/onedrive_auth.dart';
+import 'package:moodiary_sync/src/data/onedrive_http.dart';
 import 'package:moodiary_sync/src/data/remote_lease.dart';
 import 'package:moodiary_sync/src/data/secure_options.dart';
 import 'package:moodiary_sync/src/data/sync.dart';
@@ -25,7 +25,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
 
   final SecureOptions _config;
 
-  IHttpClient? _http;
+  OneDriveHttp? _http;
   Future<List<String>>? _options;
   OneDriveToken? _token;
   Future<void>? _refreshing;
@@ -34,10 +34,16 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
 
   static String _at(List<String> o, int i) => o.length > i ? o[i] : '';
 
-  static bool _ready(List<String> o) =>
-      _at(o, 0).isNotEmpty && _at(o, 1).isNotEmpty && _at(o, 2).isNotEmpty;
+  /// Gespeicherte Client-ID oder die fest eingebaute Standard-App.
+  static String _clientIdOf(List<String> o) {
+    final saved = _at(o, 0);
+    return saved.isEmpty ? OneDriveAuth.defaultClientId : saved;
+  }
 
-  IHttpClient get http => _http ??= RustHttpClient();
+  static bool _ready(List<String> o) =>
+      _at(o, 1).isNotEmpty && _at(o, 2).isNotEmpty;
+
+  OneDriveHttp get http => _http ??= OneDriveHttp();
 
   OneDriveAuth get auth => OneDriveAuth(http);
 
@@ -95,7 +101,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
 
   Future<void> _refreshToken() async {
     final opts = await _read();
-    final clientId = _at(opts, 0);
+    final clientId = _clientIdOf(opts);
     final old = await _loadToken();
     final token = await auth.refresh(clientId, old.refreshToken);
     _token = token;
@@ -108,44 +114,40 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
     _options = null;
   }
 
-  Future<HttpResponse<Uint8List>> _request(
-    HttpMethod method,
+  Future<OneDriveHttpResponse> _request(
+    String method,
     String url, {
-    Map<String, dynamic>? headers,
-    HttpBody? body,
+    Map<String, String>? headers,
+    Uint8List? body,
     Duration? timeout,
   }) async {
-    final token = await _ensureToken();
-    final response = await http.requestBytes(
-      method,
-      url,
-      headers: {
-        'authorization': 'Bearer ${token.accessToken}',
-        ...?headers,
-      },
-      body: body,
-      silent: true,
-      throwOnStatus: false,
-      timeout: timeout,
-    );
-    if (response.statusCode == 401) {
-      // The token may have been revoked server-side; refresh once and retry.
-      _token = null;
-      final retry = await _ensureToken();
-      return http.requestBytes(
+    Future<OneDriveHttpResponse> send(String accessToken) {
+      return http.request(
         method,
-        url,
+        Uri.parse(url),
         headers: {
-          'authorization': 'Bearer ${retry.accessToken}',
+          'authorization': 'Bearer $accessToken',
           ...?headers,
         },
         body: body,
-        silent: true,
-        throwOnStatus: false,
-        timeout: timeout,
+        timeout: timeout ?? const Duration(seconds: 30),
       );
     }
-    return response;
+
+    final token = await _ensureToken();
+    try {
+      final response = await send(token.accessToken);
+      if (response.statusCode != 401) return response;
+    } on TimeoutException {
+      throw SyncException(
+        l10n.sync.connectFailed(error: l10n.sync.onedriveDriveError),
+        kind: .network,
+      );
+    }
+    // The token may have been revoked server-side; refresh once and retry.
+    _token = null;
+    final retry = await _ensureToken();
+    return send(retry.accessToken);
   }
 
   String _itemUrl(String key, {bool content = false}) {
@@ -161,7 +163,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   Future<void> testConnection() async {
     if (!await isReady()) throw notReadyError;
     try {
-      final response = await _request(HttpMethod.get, '$_graph/me/drive/root');
+      final response = await _request('GET', '$_graph/me/drive/root');
       if (response.statusCode != 200) {
         throw SyncException(
           l10n.sync.connectFailed(
@@ -180,15 +182,15 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   Future<Uint8List?> readObject(String key) async {
     try {
       final response = await _request(
-        HttpMethod.get,
+        'GET',
         _itemUrl(key, content: true),
         timeout: const Duration(minutes: 5),
       );
       if (response.statusCode == 404) return null;
-      if (response.statusCode != 200 || response.data == null) {
+      if (response.statusCode != 200 || response.body.isEmpty) {
         throw _graphError(key, response, 'read');
       }
-      return response.data;
+      return response.body;
     } catch (e) {
       throw _wrap(e, key, 'read');
     }
@@ -198,10 +200,10 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   Future<void> writeObject(String key, Uint8List bytes) async {
     try {
       final response = await _request(
-        HttpMethod.put,
+        'PUT',
         _itemUrl(key, content: true),
         headers: {'content-type': 'application/octet-stream'},
-        body: HttpBody.raw(bytes),
+        body: bytes,
         timeout: const Duration(minutes: 10),
       );
       if (response.statusCode != 200 && response.statusCode != 201) {
@@ -245,13 +247,13 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
       final stat = await statObject(key);
       if (stat != null) return .exists;
       final response = await _request(
-        HttpMethod.put,
+        'PUT',
         _itemUrl(key, content: true),
         headers: {
           'content-type': 'application/octet-stream',
           'if-none-match': '*',
         },
-        body: HttpBody.raw(bytes),
+        body: bytes,
         timeout: const Duration(minutes: 10),
       );
       return switch (response.statusCode) {
@@ -269,7 +271,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   Future<void> deleteObject(String key) async {
     try {
       final response = await _request(
-        HttpMethod.delete,
+        'DELETE',
         _itemUrl(key),
         timeout: const Duration(minutes: 2),
       );
@@ -287,15 +289,15 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
   Future<String?> statObject(String key) async {
     try {
       final response = await _request(
-        HttpMethod.get,
+        'GET',
         _itemUrl(key),
         timeout: const Duration(seconds: 30),
       );
       if (response.statusCode == 404) return null;
-      if (response.statusCode != 200 || response.data == null) {
+      if (response.statusCode != 200 || response.body.isEmpty) {
         throw _graphError(key, response, 'stat');
       }
-      final decoded = jsonDecode(utf8.decode(response.data!));
+      final decoded = jsonDecode(utf8.decode(response.body));
       if (decoded is! Map<String, dynamic>) return null;
       final etag = decoded['eTag'];
       final modified = decoded['lastModifiedDateTime'];
@@ -310,7 +312,7 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
     }
   }
 
-  SyncException _graphError(String key, HttpResponse<Uint8List> response, String action) {
+  SyncException _graphError(String key, OneDriveHttpResponse response, String action) {
     final detail = _errorDetail(response);
     return SyncException(
       detail != null
@@ -324,12 +326,14 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
         401 || 403 => .auth,
         404 => .notFound,
         final int s when s >= 500 => .server,
+        // Ohne Status (DNS, Verbindungsabbruch) ist es ein Netzproblem.
+        null => .network,
         _ => .http,
       };
 
-  String? _errorDetail(HttpResponse<Uint8List> response) {
-    final data = response.data;
-    if (data == null || data.isEmpty) return null;
+  String? _errorDetail(OneDriveHttpResponse response) {
+    final data = response.body;
+    if (data.isEmpty) return null;
     try {
       final decoded = jsonDecode(utf8.decode(data));
       if (decoded is! Map<String, dynamic>) return null;
@@ -352,14 +356,16 @@ class OneDriveSyncBackend implements IRemoteSyncBackend {
         kind: .auth,
       );
     }
-    if (e is HttpException) {
+    if (e is TimeoutException) {
+      return SyncException(
+        l10n.sync.errReadRemote(key: key, error: e.toString()),
+        kind: .network,
+      );
+    }
+    if (e is OneDriveHttpException) {
       return SyncException(
         l10n.sync.errReadRemote(key: key, error: e.message),
-        kind: switch (e.type) {
-          HttpErrorType.timeout || HttpErrorType.connection => .network,
-          HttpErrorType.statusCode => _kind(e.statusCode),
-          _ => .http,
-        },
+        kind: _kind(e.statusCode),
       );
     }
     return SyncException(

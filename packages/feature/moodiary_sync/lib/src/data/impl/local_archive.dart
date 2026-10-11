@@ -11,6 +11,7 @@ import 'package:moodiary_sync/src/data/codec.dart';
 import 'package:moodiary_sync/src/data/incremental_engine.dart';
 import 'package:moodiary_sync/src/data/media_refs.dart';
 import 'package:moodiary_sync/src/data/model/manifest.dart';
+import 'package:moodiary_sync/src/data/settings_backup.dart';
 import 'package:moodiary_sync/src/data/sync.dart';
 import 'package:moodiary_sync/src/data/sync_stores.dart';
 import 'package:path/path.dart' as p;
@@ -42,6 +43,7 @@ class LocalArchive {
           mediaInfos: mediaInfos,
           tombstones: tombstones,
           mediaBaseDir: PlatformService.get().applicationSupportPath,
+          includeSettings: true,
         );
       } catch (_) {
         zip.dispose();
@@ -171,6 +173,7 @@ class LocalArchive {
     required List<SyncTombstone> tombstones,
     required String mediaBaseDir,
     SyncManifest? remote,
+    bool includeSettings = false,
   }) async {
     const cipher = SyncCipher.plaintext;
     final manifest = await buildManifest(
@@ -251,6 +254,24 @@ class LocalArchive {
         ).toJson(),
       ),
     );
+    if (includeSettings) {
+      final settings = await SettingsBackup.collect();
+      await sink.addBytes(
+        kSettingsBackupPath,
+        await cipher.encode(settings),
+      );
+      final chatImages = settings['chatImages'];
+      if (chatImages is List) {
+        for (final name in chatImages.whereType<String>()) {
+          // Bereits als Tagebuch-Medium abgelegt → nur Referenz, keine Kopie.
+          if (addedMedia.contains('image/$name')) continue;
+          final file = File(p.join(mediaBaseDir, 'image', name));
+          if (await file.exists()) {
+            await sink.addLocalFile('$kChatMediaPrefix/$name', file.path);
+          }
+        }
+      }
+    }
     await sink.finish();
     return included.length;
   }
@@ -319,8 +340,29 @@ class LocalArchive {
     if (decoded is! Map<String, dynamic>) {
       throw SyncException(l10n.sync.errManifestCorrupt);
     }
-    return runSyncExclusive(
-      () => ArchiveApplier(
+    return runSyncExclusive(() async {
+      // Einstellungsbeilage ist optional: alte Backups ohne settings.json
+      // bleiben importierbar, Einstellungen werden dann nicht angerührt.
+      final settingsBytes = await backend.readObject(kSettingsBackupPath);
+      if (settingsBytes != null) {
+        final settings = await (await cipher()).decode(settingsBytes);
+        if (settings is Map<String, dynamic>) {
+          await SettingsBackup.restore(settings);
+          final files = mediaFiles;
+          if (files != null) {
+            final chatImages = settings['chatImages'];
+            if (chatImages is List) {
+              for (final name in chatImages.whereType<String>()) {
+                final bytes = await backend.readObject(
+                  '$kChatMediaPrefix/$name',
+                );
+                if (bytes != null) await files.write('image', name, bytes);
+              }
+            }
+          }
+        }
+      }
+      return ArchiveApplier(
         backend,
         policy: policy,
         diaryStore: diaryStore,
@@ -331,8 +373,8 @@ class LocalArchive {
         mediaFiles: mediaFiles,
         cipherProvider: cipher,
         concurrency: concurrency ?? 4,
-      ).apply(SyncManifest.fromJson(decoded)),
-    );
+      ).apply(SyncManifest.fromJson(decoded));
+    });
   }
 }
 

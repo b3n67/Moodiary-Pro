@@ -24,13 +24,17 @@ class _ViewModeSheetState extends State<ViewModeSheet> {
   static const List<DiarySort> _timelineSorts = [.timeDesc, .timeAsc];
 
   List<DiarySort> get _availableSorts =>
-      ViewModeType.getType(_mode) == .timeline
-      ? _timelineSorts
-      : DiarySort.values;
+      switch (ViewModeType.getType(_mode)) {
+        .timeline => _timelineSorts,
+        // Der Kalender sortiert nicht: Monate stehen fest.
+        .calendar => const [],
+        .feed => DiarySort.values,
+      };
 
   String _label(BuildContext context, ViewModeType type) => switch (type) {
     .timeline => context.l10n.diary.viewModeTimeline,
     .feed => context.l10n.diary.viewModeFeed,
+    .calendar => context.l10n.diary.viewModeCalendar,
   };
 
   String _sortLabel(BuildContext context, DiarySort sort) => switch (sort) {
@@ -66,7 +70,11 @@ class _ViewModeSheetState extends State<ViewModeSheet> {
 
   void _apply() {
     MoodiaryKVs.homeViewMode.set(_mode);
-    MoodiaryKVs.homeSortMode.set(_sort);
+    // Im Kalendermodus nichts überschreiben: Beim Zurückwechseln gilt die
+    // zuletzt gewählte Sortierung weiter.
+    if (_availableSorts.isNotEmpty) {
+      MoodiaryKVs.homeSortMode.set(_sort);
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -99,19 +107,21 @@ class _ViewModeSheetState extends State<ViewModeSheet> {
               onSelectionChanged: (value) => _pickMode(value.first),
             ),
             const SizedBox(height: 20),
+          ],
+          if (_availableSorts.isNotEmpty) ...[
             MFormSection(l10n.diary.sortTitle),
             const SizedBox(height: 10),
-          ],
-          for (final sort in _availableSorts)
-            MSheetOptionTile<int>(
-              option: MSheetOption(
-                value: sort.number,
-                label: _sortLabel(context, sort),
-                icon: _sortIcon(sort),
+            for (final sort in _availableSorts)
+              MSheetOptionTile<int>(
+                option: MSheetOption(
+                  value: sort.number,
+                  label: _sortLabel(context, sort),
+                  icon: _sortIcon(sort),
+                ),
+                selected: _sort == sort.number,
+                onTap: () => setState(() => _sort = sort.number),
               ),
-              selected: _sort == sort.number,
-              onTap: () => setState(() => _sort = sort.number),
-            ),
+          ],
         ],
       ),
     );

@@ -41,6 +41,8 @@ enum MoodiaryKVs<T extends Object> {
 
   themeMode<int>(defaultValue: 0),
 
+  amoledBlack<bool>(defaultValue: false),
+
   fontTheme<int>(defaultValue: 0),
 
   customFont<String>(defaultValue: ''),
@@ -79,6 +81,12 @@ enum MoodiaryKVs<T extends Object> {
 
   assistantUserNotes<String>(defaultValue: ''),
 
+  assistantPromptPresets<String>(defaultValue: '[]'),
+
+  assistantActivePromptId<String>(defaultValue: ''),
+
+  assistantPromptSeedVersion<int>(defaultValue: 0),
+
   assistantMemoryEnabled<bool>(defaultValue: true),
 
   llmPresetCache<String>(defaultValue: ''),
@@ -109,7 +117,8 @@ enum MoodiaryKVs<T extends Object> {
   cachePath<String>(),
   uuid<String>(),
   local<bool>(defaultValue: false),
-  language<String>(defaultValue: 'system');
+  language<String>(defaultValue: 'system'),
+  weekStart<int>(defaultValue: 1 /* DateTime.monday */);
 
   final T? defaultValue;
 

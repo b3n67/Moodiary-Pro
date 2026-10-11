@@ -20,6 +20,7 @@
   "searchHistoryEmpty": "Noch kein Suchverlauf",
   "viewModeTimeline": "Zeitleiste",
   "viewModeFeed": "Feed",
+  "viewModeCalendar": "Kalender",
   "linkNotFound": "Tagebuch nicht gefunden oder gelöscht",
   "knowledgeGraph": "Wissensgraph",
   "graphCount": "{nodes} Notizen · {edges} Verknüpfungen",

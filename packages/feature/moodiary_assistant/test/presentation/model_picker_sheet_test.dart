@@ -5,6 +5,7 @@ import 'package:moodiary_assistant/src/presentation/model_picker_sheet.dart';
 import 'package:moodiary_components/moodiary_components.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_models/moodiary_models.dart';
+import 'package:mui/mui.dart';
 
 LlmProvider _provider(String name) => LlmProvider.create(
   name: name,
@@ -89,8 +90,7 @@ void main() {
     );
   }
 
-  testWidgets('点模型行只是选中，确认后才带回；档位原样保留', (tester) async {
-    await tester.pumpWidget(host(modelId: 'a', level: 'high'));
+  testWidgets('点模型行只是选中，确认后才带回；档位原样保留', (tester) async {    await tester.pumpWidget(host(modelId: 'a', level: 'high'));
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
@@ -104,6 +104,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(choice, (providerId: alpha.id, modelId: 'b', level: 'high'));
     expect(find.text('b'), findsNothing);
+  });
+
+  testWidgets('Anbieter lassen sich ein- und ausklappen', (tester) async {
+    await tester.pumpWidget(host(modelId: 'a'));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('a'), findsOneWidget);
+    expect(find.text('c'), findsOneWidget);
+
+    // Alpha zuklappen: eigene Modelle weg, Beta bleibt.
+    await tester.tap(find.byTooltip('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('a'), findsNothing);
+    expect(find.text('c'), findsOneWidget);
+
+    // Wieder aufklappen.
+    await tester.tap(find.byTooltip('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('a'), findsOneWidget);
   });
 
   testWidgets('档位 chip 跟着选中的行走，点了也不关', (tester) async {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:moodiary_assistant/src/data/assistant_defs.dart';
@@ -6,6 +7,7 @@ import 'package:moodiary_assistant/src/data/js_sandbox.dart';
 import 'package:moodiary_assistant/src/data/memory_repository.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_di/moodiary_di.dart';
+import 'package:moodiary_files/moodiary_files.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_models/moodiary_models.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
@@ -206,6 +208,14 @@ abstract final class AssistantToolRegistry {
                   'type': 'string',
                   'description': 'Optional category id from listCategories.',
                 },
+                'images': {
+                  'type': 'array',
+                  'items': {'type': 'string'},
+                  'description':
+                      'Filenames of images attached to the current turn (see '
+                      'turn context) to keep in the entry. Only names from '
+                      'the context; never invent names.',
+                },
               },
               'required': ['content'],
             },
@@ -249,6 +259,14 @@ abstract final class AssistantToolRegistry {
                 'categoryId': {
                   'type': 'string',
                   'description': 'New category id.',
+                },
+                'images': {
+                  'type': 'array',
+                  'items': {'type': 'string'},
+                  'description':
+                      'Filenames of images attached to the current turn (see '
+                      'turn context) to add to the entry. Only names from '
+                      'the context; never invent names.',
                 },
               },
               'required': ['id'],
@@ -1042,14 +1060,22 @@ abstract final class AssistantToolRegistry {
 
   static Future<String> _createOneDiary(Map<String, dynamic> input) async {
     final title = (input['title'] as String?)?.trim() ?? '';
-    final content = (input['content'] as String?)?.trim() ?? '';
+    var content = (input['content'] as String?)?.trim() ?? '';
     if (content.isEmpty) return 'Failed: the body cannot be empty.';
 
     final mood = _parseMood(input['mood']) ?? DiaryMood.neutral;
     final categoryId = await _resolveCategoryId(input['categoryId']);
 
+    final images = await _resolveImageNames(input['images']);
+    if (images.isNotEmpty) {
+      final missing = images.where((n) => !content.contains(n)).toList();
+      if (missing.isNotEmpty) {
+        content =
+            '$content\n${missing.map((n) => '![]($n)').join('\n')}';
+      }
+    }
     final converted = _toTiptap(content);
-    final diary = Diary.create(
+    var diary = Diary.create(
       categoryId: categoryId,
       title: title,
       content: converted.content,
@@ -1062,9 +1088,45 @@ abstract final class AssistantToolRegistry {
       type: converted.type,
       aspect: null,
     );
+    diary = withDerivedMedia(diary).copyWith(
+      imageName: {...diary.imageName, ...images}.toList(),
+    );
     await getIt<DiaryRepository>().insertADiary(diary);
     return 'Created "${title.isEmpty ? 'Untitled' : title}" '
         '(${TimeFormat.isoDate(diary.time)}), id=${diary.id}.';
+  }
+
+  /// Filtert Bildnamen aus Tool-Argumenten: nur nicht-leere Strings,
+  /// gedeckelt, und nur Dateien, die wirklich im Bildspeicher liegen.
+  /// [exists] ist nur für Tests injizierbar.
+  @visibleForTesting
+  static Future<List<String>> resolveImageNames(
+    Object? raw, {
+    Future<bool> Function(String name)? exists,
+  }) => _resolveImageNames(raw, exists: exists);
+  static final _unsafeName = RegExp(r'[/\\]|\.\.|[()]|[\x00-\x1f\x7f]');
+
+  static Future<List<String>> _resolveImageNames(
+    Object? raw, {
+    Future<bool> Function(String name)? exists,
+  }) async {
+    if (raw is! List) return const [];
+    final seen = <String>[];
+    for (final e in raw) {
+      if (e is! String) continue;
+      final name = e.trim();
+      // Keine Pfade, keine Markdown-Klammern: nur schlichte Dateinamen.
+      if (name.isEmpty || seen.contains(name)) continue;
+      if (name.length > 128 || _unsafeName.hasMatch(name)) continue;
+      if (seen.length >= 10) break;
+      final ok = exists != null
+          ? await exists(name)
+          : await File(
+              AppFiles.getRealPath('image', name),
+            ).exists();
+      if (ok) seen.add(name);
+    }
+    return seen;
   }
 
   static ({String content, String contentText, DiaryType type}) _toTiptap(
@@ -1114,6 +1176,24 @@ abstract final class AssistantToolRegistry {
     }
     final mood = _parseMood(input['mood']);
     if (mood != null) updated = updated.copyWith(mood: mood);
+    final images = await _resolveImageNames(input['images']);
+    if (images.isNotEmpty) {
+      final missing = images
+          .where((n) => !updated.imageName.contains(n))
+          .toList();
+      final refs = missing
+          .where((n) => !updated.content.contains(n))
+          .map((n) => '![]($n)')
+          .join('\n');
+      updated = withDerivedMedia(
+        updated.copyWith(
+          content: refs.isEmpty
+              ? updated.content
+              : '${updated.content}\n$refs',
+          imageName: {...updated.imageName, ...missing}.toList(),
+        ),
+      );
+    }
     if (input.containsKey('categoryId')) {
       final rawCategory = (input['categoryId'] as String?)?.trim() ?? '';
       if (rawCategory.isEmpty) {

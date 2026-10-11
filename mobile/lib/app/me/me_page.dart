@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:moodiary_data/moodiary_data.dart';
 import 'package:moodiary_i18n/moodiary_i18n.dart';
 import 'package:moodiary_router/moodiary_router.dart';
+import 'package:moodiary_storage/moodiary_storage.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
 import 'package:mui/mui.dart';
 
@@ -141,6 +142,11 @@ class _HeatmapCard extends StatelessWidget {
                     onDaySelected: onSelect,
                     monthLabel: TimeFormat.monthAbbr,
                     semanticsLabel: l10n.app.meHeatmapSemantics,
+                    weekStart:
+                        (MoodiaryKVs.weekStart.get() ?? DateTime.monday) ==
+                                DateTime.sunday
+                            ? DateTime.sunday
+                            : DateTime.monday,
                   ),
                   const SizedBox(height: 12),
                   _Footer(stats: data, selected: selected),

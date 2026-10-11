@@ -1,6 +1,7 @@
 enum ViewModeType {
   timeline(3, 'TimelineView'),
-  feed(4, 'FeedView');
+  feed(4, 'FeedView'),
+  calendar(5, 'CalendarView');
 
   const ViewModeType(this.number, this.value);
 

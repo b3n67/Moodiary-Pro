@@ -73,6 +73,9 @@ class _Translations$app$en extends Translations$app$zh {
 	@override String get languageSimplifiedChinese => '简体中文';
 	@override String get languageEnglish => 'English';
 	@override String get languageGerman => 'Deutsch';
+	@override String get weekStart => 'Week start';
+	@override String get weekStartMonday => 'Monday';
+	@override String get weekStartSunday => 'Sunday';
 	@override String get settingsTitle => 'Settings';
 	@override String get sectionData => 'Data';
 	@override String get recycle => 'Recycle bin';
@@ -93,6 +96,8 @@ class _Translations$app$en extends Translations$app$zh {
 	@override String get themeModeSystem => 'Follow the system';
 	@override String get themeModeLight => 'Light';
 	@override String get themeModeDark => 'Dark';
+	@override String get amoledTitle => 'AMOLED black';
+	@override String get amoledSubtitle => 'True black surfaces in dark mode — saves power on OLED displays';
 	@override String homeSelected({required Object count}) => '${count} selected';
 	@override String get homeDeleteTitle => 'Delete the selected entries?';
 	@override String homeDeleteMessage({required Object count}) => '${count} entries will be moved to the recycle bin, where you can restore them.';
@@ -256,6 +261,9 @@ class _Translations$assistant$en extends Translations$assistant$zh {
 	@override String get newChat => 'New chat';
 	@override String get menuCompactNow => 'Compact history';
 	@override String get menuSettings => 'Assistant settings';
+	@override String get menuRename => 'Rename chat';
+	@override String get renameTitle => 'Rename chat';
+	@override String get renameLabel => 'Name';
 	@override String get compactedNow => 'Earlier messages compacted';
 	@override String get compactNothing => 'Nothing to compact';
 	@override String get compactFailed => 'Compaction failed, try again later';
@@ -317,6 +325,24 @@ class _Translations$assistant$en extends Translations$assistant$zh {
 	@override String memoryDeleteMessage({required Object text}) => '“${text}” is deleted for good and the assistant will not recall it again.';
 	@override String get memoryClearTitle => 'Clear every memory?';
 	@override String get memoryClearMessage => 'Everything the assistant saved is deleted for good. This cannot be undone.';
+	@override String get promptSectionTitle => 'Prompts';
+	@override String get promptEmpty => 'No prompts yet — create one, e.g. for journaling or translations';
+	@override String get promptAdd => 'New prompt';
+	@override String get promptEdit => 'Edit prompt';
+	@override String get promptNameLabel => 'Name';
+	@override String get promptNameHint => 'e.g. Journal coach';
+	@override String get promptContentLabel => 'Instruction';
+	@override String get promptContentHint => 'What the assistant should follow for this prompt …';
+	@override String get promptDeleteTitle => 'Delete this prompt?';
+	@override String promptDeleteMessage({required Object name}) => '“${name}” will be deleted. Ongoing chats keep using it until the next message.';
+	@override String get promptNone => 'No prompt';
+	@override String get promptSwitchTitle => 'Choose prompt';
+	@override String get promptActive => 'Active';
+	@override String get presetBuiltIn => 'Built-in';
+	@override String get presetFactoryName => 'Moodiary Assistant';
+	@override String get presetFactoryDesc => 'The factory preset: a warm, grounded diary companion.';
+	@override String get presetDeriveCopy => 'Derive a copy';
+	@override String promptCopyName({required Object name}) => '${name} (copy)';
 	@override String get memoryClearConfirm => 'Clear all';
 	@override String get memoryEdit => 'Edit';
 	@override String get memoryEditTitle => 'Edit memory';
@@ -414,6 +440,12 @@ class _Translations$assistant$en extends Translations$assistant$zh {
 	@override String get modelProviderCapabilitiesHint => 'Enable what this model supports — controls tools, thinking, and image sending.';
 	@override String get modelProviderSearchModelHint => 'Search models';
 	@override String get modelProviderNoModelMatch => 'No matching models';
+	@override String get modelFilterFree => 'Free (\$0)';
+	@override String get modelFilterReasoning => 'Adjustable reasoning';
+	@override String get modelSortLabel => 'Sort by';
+	@override String get modelSortStandard => 'Default';
+	@override String get modelSortName => 'Name';
+	@override String get modelSortPrice => 'Price';
 	@override String get modelProviderFillKey => 'Add key';
 	@override String get modelProviderManage => 'Manage providers';
 	@override String get modelCatalogMissing => 'No model catalogue yet';
@@ -545,7 +577,7 @@ class _Translations$common$en extends Translations$common$zh {
 	@override String categoryCount({required Object count}) => '${count} categories';
 	@override String get fileName => 'File name';
 	@override String get close => 'Close';
-	@override String get appName => 'Moodiary';
+	@override String get appName => 'Moodiary+';
 	@override String get configured => 'Configured';
 	@override String get notConfigured => 'Not configured';
 	@override String get copied => 'Copied to clipboard';
@@ -579,6 +611,7 @@ class _Translations$diary$en extends Translations$diary$zh {
 	@override String get searchHistoryEmpty => 'No search history yet';
 	@override String get viewModeTimeline => 'Timeline';
 	@override String get viewModeFeed => 'Feed';
+	@override String get viewModeCalendar => 'Calendar';
 	@override String get linkNotFound => 'Diary not found or deleted';
 	@override String get knowledgeGraph => 'Knowledge Graph';
 	@override String graphCount({required Object nodes, required Object edges}) => '${nodes} notes · ${edges} links';
@@ -1376,25 +1409,20 @@ class _Translations$sync$en extends Translations$sync$zh {
 	@override String get logHealth => 'Connection';
 	@override String lastSuccess({required Object time}) => 'last success ${time}';
 	@override String get backupSyncOnedrive => 'Microsoft OneDrive';
-	@override String get onedriveOptionClientId => 'Client ID (Azure app)';
 	@override String get onedriveOptionSignedIn => 'Signed in';
-	@override String get onedriveOptionSignedOut => 'Signed out';
 	@override String get onedriveSignIn => 'Sign in with Microsoft';
 	@override String get onedriveSignInSubtitle => 'Sign in in a browser window and approve access';
 	@override String get onedriveSignOut => 'Sign out';
 	@override String get onedriveSignOutConfirmTitle => 'Sign out of OneDrive?';
 	@override String get onedriveSignOutConfirmMessage => 'Syncing with OneDrive stops. Diaries on this device are untouched.';
-	@override String get onedriveClientIdHint => 'The Application (client) ID of your Azure app registration';
-	@override String get onedriveClientIdRequired => 'The client ID is required';
 	@override String onedriveAuthFailed({required Object error}) => 'Microsoft sign-in failed: ${error}';
-	@override String get onedriveTokenExpired => 'The sign-in has expired, sign in again';
-	@override String get onedriveSetupGuideTitle => 'Set up OneDrive';
-	@override String get onedriveSetupGuideMessage => 'Register a free app in the Azure portal (App registrations → New registration) with "Accounts in any organization and personal Microsoft accounts" and redirect URI http://localhost. Then add the API permission "Microsoft Graph → Files.ReadWrite.All" and enter the client ID here.';
-	@override String get onedriveSetupGuideOpen => 'Open Azure portal';
 	@override String get onedriveNotSignedIn => 'Sign in with Microsoft first';
 	@override String get onedriveDriveError => 'The OneDrive could not be read';
-	@override String get onedriveUploadConflict => 'The file already exists on OneDrive';
+	@override String get onedriveDnsFailed => 'Cannot reach Microsoft servers (DNS). Check Private DNS, VPN or DNS/ad-blocker apps on this device and retry.';
 	@override String get errOnedriveConfig => 'Finish the OneDrive configuration first';
+	@override String get onedriveOptionClientId => 'Client ID (Azure app)';
+	@override String get onedriveClientIdHint => 'The Application (client) ID of your Azure app registration';
+	@override String get onedriveClientIdRequired => 'The client ID is required';
 }
 
 // Path: ui

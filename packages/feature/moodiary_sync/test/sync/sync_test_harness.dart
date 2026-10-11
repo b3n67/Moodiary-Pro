@@ -491,6 +491,13 @@ Future<void> configureBackend(SyncProviderType type) async {
     case .s3:
       await getIt<IRemoteSyncBackend>(instanceName: type.value)
           .saveOptions(['https://s3.example', '', 'ak', 'sk', 'bucket', '1']);
+    case .onedrive:
+      await getIt<IRemoteSyncBackend>(instanceName: type.value).saveOptions([
+        'client-id',
+        'access',
+        'refresh',
+        '9999999999999',
+      ]);
   }
 }
 

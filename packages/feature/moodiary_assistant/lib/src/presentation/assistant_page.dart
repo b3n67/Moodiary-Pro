@@ -16,6 +16,7 @@ import 'package:moodiary_assistant/src/data/assistant_tools.dart';
 import 'package:moodiary_assistant/src/data/chat_repository.dart';
 import 'package:moodiary_assistant/src/data/llm_preset_repository.dart';
 import 'package:moodiary_assistant/src/data/llm_provider_repository.dart';
+import 'package:moodiary_assistant/src/data/prompt_preset_repository.dart';
 import 'package:moodiary_assistant/src/data/memory_repository.dart';
 import 'package:moodiary_assistant/src/data/model_resolver.dart';
 import 'package:moodiary_assistant/src/presentation/assistant_notice.dart';
@@ -50,7 +51,7 @@ const double _kModelChipMinHeight = 32;
 // 轮间 20，轮内 8
 const double _kTurnGap = 20;
 
-enum _ConversationAction { permission, compact, settings }
+enum _ConversationAction { permission, compact, rename, settings }
 
 Widget _codeBlock(
   BuildContext context,
@@ -396,6 +397,80 @@ class _AssistantPageState extends State<AssistantPage> {
     ];
   }
 
+  Widget _buildTitle(BuildContext context, Translations l10n) {
+    final presetName =
+        PromptPresetRepository().active()?.name ??
+        l10n.assistant.presetFactoryName;
+    final modelName = _activeModel?.name ?? _modelId;
+    final modelLabel = modelName.isEmpty
+        ? l10n.assistant.historyModelUnset
+        : modelName;
+    final style = context.theme.typography.labelSmall.onSurfaceVariant;
+    return Column(
+      crossAxisAlignment: .start,
+      mainAxisSize: .min,
+      children: [
+        Text(_titleText(l10n), maxLines: 1, overflow: .ellipsis),
+        Row(
+          mainAxisSize: .min,
+          children: [
+            Flexible(
+              child: _TitleTap(
+                label: presetName,
+                style: style,
+                onTap: _sending ? null : _pickPrompt,
+              ),
+            ),
+            Text(' · ', style: style),
+            Flexible(
+              child: _TitleTap(
+                label: modelLabel,
+                style: style,
+                onTap: _sending ? null : _pickModel,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickPrompt() async {
+    if (_sending) return;
+    final l10n = context.l10n;
+    final repo = PromptPresetRepository();
+    await repo.ensureSeeded();
+    final presets = repo.getAll();
+    if (!mounted) return;
+    final picked = await MSheet.picker<String>(
+      context,
+      title: l10n.assistant.promptSwitchTitle,
+      icon: LucideIcons.messagesSquare,
+      selected: repo.activeId().isEmpty
+          ? PromptPresetRepository.builtInId
+          : repo.activeId(),
+      options: [
+        MSheetOption(
+          value: PromptPresetRepository.builtInId,
+          label:
+              '${l10n.assistant.presetFactoryName} · ${l10n.assistant.presetBuiltIn}',
+          subtitle: l10n.assistant.presetFactoryDesc,
+        ),
+        for (final p in presets)
+          MSheetOption(
+            value: p.id,
+            label: p.name,
+            subtitle: p.content.split('\n').first,
+          ),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    await repo.setActiveId(
+      picked == PromptPresetRepository.builtInId ? '' : picked,
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _pickModel() async {
     if (_sending) return;
     final groups = await _providerGroups();
@@ -526,9 +601,29 @@ class _AssistantPageState extends State<AssistantPage> {
         unawaited(_pickPermission());
       case .compact:
         unawaited(_compactNow());
+      case .rename:
+        unawaited(_renameSession());
       case .settings:
         unawaited(_openSettings());
     }
+  }
+
+  Future<void> _renameSession() async {
+    final session = _session;
+    if (session == null || !mounted) return;
+    final name = await MSheet.show<String>(
+      context,
+      builder: (_) => _RenameSheet(initial: session.title),
+    );
+    if (name == null || !mounted) return;
+    final title = normalizeSessionTitle(
+      name,
+      maxBytes: assistantTitleMaxBytes,
+    );
+    if (title.isEmpty || title == session.title) return;
+    final updated = session.copyWith(title: title);
+    await getIt<ChatRepository>().upsertSession(updated);
+    if (mounted) setState(() => _session = updated);
   }
 
   String get _effectiveLevel => effectiveReasoningLevel(
@@ -805,12 +900,16 @@ class _AssistantPageState extends State<AssistantPage> {
       toolsEnabled: toolsActive,
       memoryEnabled: memoryEnabled,
       userNotes: MoodiaryKVs.assistantUserNotes.get() ?? '',
+      activePrompt: PromptPresetRepository().active()?.content ?? '',
       confirmsWrites: toolsActive && _permissionMode.confirmsWrites,
     );
     final volatilePrefix = buildTurnContext(
       nowLocal: .now(),
       factCount: factCount,
       semanticSearch: AssistantToolRegistry.semanticAvailable,
+      attachedImages: userMessage.imageName.isEmpty
+          ? const []
+          : [userMessage.imageName],
     );
 
     _resetThinkingState();
@@ -1442,7 +1541,7 @@ class _AssistantPageState extends State<AssistantPage> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: Text(_titleText(l10n), maxLines: 1, overflow: .ellipsis),
+        title: _buildTitle(context, l10n),
         actions: [
           MMenuButton<_ConversationAction>(
             tooltip: l10n.common.more,
@@ -1457,6 +1556,12 @@ class _AssistantPageState extends State<AssistantPage> {
                 value: .compact,
                 label: l10n.assistant.menuCompactNow,
                 icon: LucideIcons.foldVertical,
+                enabled: _session != null && !_sending,
+              ),
+              MMenuEntry(
+                value: .rename,
+                label: l10n.assistant.menuRename,
+                icon: LucideIcons.pencil,
                 enabled: _session != null && !_sending,
               ),
               MMenuEntry(
@@ -1481,8 +1586,7 @@ class _AssistantPageState extends State<AssistantPage> {
     );
   }
 
-  Widget _buildModelChip(Translations l10n) {
-    return _ModelChip(
+  Widget _buildModelChip(Translations l10n) {    return _ModelChip(
       provider: _provider,
       providerMissing: _providerMissing,
       modelLabel: _activeModel?.name ?? _modelId,
@@ -1597,6 +1701,83 @@ class _DisclaimerGate extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RenameSheet extends StatefulWidget {
+  final String initial;
+
+  const _RenameSheet({required this.initial});
+
+  @override
+  State<_RenameSheet> createState() => _RenameSheetState();
+}
+
+class _RenameSheetState extends State<_RenameSheet> {
+  late final TextEditingController _ctl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctl = TextEditingController(text: widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _ctl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return MSheetScaffold<String>(
+      title: l10n.assistant.renameTitle,
+      icon: LucideIcons.pencil,
+      actions: [
+        MAction(label: l10n.common.cancel),
+        MAction(
+          label: l10n.common.save,
+          isPrimary: true,
+          onPressed: () =>
+              Navigator.of(context).pop(_ctl.text.trim()),
+        ),
+      ],
+      child: MField(
+        controller: _ctl,
+        label: l10n.assistant.renameLabel,
+        textInputAction: .done,
+        onSubmitted: (v) => Navigator.of(context).pop(v.trim()),
+        maxLength: 80,
+      ),
+    );
+  }
+}
+
+class _TitleTap extends StatelessWidget {  final String label;
+  final TextStyle style;
+  final VoidCallback? onTap;
+
+  const _TitleTap({
+    required this.label,
+    required this.style,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: .min,
+        children: [
+          Flexible(
+            child: Text(label, maxLines: 1, overflow: .ellipsis, style: style),
+          ),
+          Icon(LucideIcons.chevronDown, size: 14, color: style.color),
+        ],
       ),
     );
   }
@@ -1890,9 +2071,8 @@ class _AssistantComposerState extends State<_AssistantComposer> {
                             maxLines: _maxLines(context),
                             variant: .plain,
                             showClear: false,
-                            textInputAction: .send,
+                            textInputAction: .newline,
                             hintText: l10n.assistant.inputHint,
-                            onSubmitted: (_) => widget.onSend(),
                           ),
                         ),
                       ),
@@ -2776,14 +2956,43 @@ class _SessionTile extends StatelessWidget {
     .earlier => TimeFormat.relative(session.updatedAt),
   };
 
-  Future<bool> _confirmDelete(BuildContext context) async {
-    final l10n = context.l10n;
+  Future<bool> _confirmDelete(BuildContext context) async {    final l10n = context.l10n;
     return MAlert.confirm(
       context,
       title: l10n.common.delete,
       message: _sessionTitle(session, l10n),
       confirmLabel: l10n.common.delete,
       isDestructive: true,
+    );
+  }
+
+  Future<void> _rename(BuildContext context) async {
+    final l10n = context.l10n;
+    final picked = await MSheet.picker<String>(
+      context,
+      title: _sessionTitle(session, l10n),
+      icon: LucideIcons.messagesSquare,
+      options: [
+        MSheetOption(
+          value: 'rename',
+          label: l10n.assistant.menuRename,
+          icon: LucideIcons.pencil,
+        ),
+      ],
+    );
+    if (picked != 'rename' || !context.mounted) return;
+    final name = await MSheet.show<String>(
+      context,
+      builder: (_) => _RenameSheet(initial: session.title),
+    );
+    if (name == null || !context.mounted) return;
+    final title = normalizeSessionTitle(
+      name,
+      maxBytes: assistantTitleMaxBytes,
+    );
+    if (title.isEmpty || title == session.title) return;
+    await getIt<ChatRepository>().upsertSession(
+      session.copyWith(title: title),
     );
   }
 
@@ -2813,6 +3022,7 @@ class _SessionTile extends StatelessWidget {
       ),
       child: MInkWell(
         onTap: onTap,
+        onLongPress: () => _rename(context),
         child: Padding(
           padding: const .symmetric(horizontal: 16, vertical: 12),
           child: Row(

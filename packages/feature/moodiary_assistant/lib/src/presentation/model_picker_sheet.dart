@@ -22,6 +22,76 @@ typedef ProviderModels = ({
   bool hasKey,
 });
 
+/// Nur Modelle mit bekanntem Nulltarif (0 $ Ein- und Ausgabe).
+bool modelIsFree(ModelOption o) {
+  final p = o.preset;
+  if (p == null) return false;
+  return (p.inputCost ?? -1) == 0 && (p.outputCost ?? -1) == 0;
+}
+
+/// Nur Modelle mit einstellbarem Reasoning.
+bool modelSupportsReasoning(ModelOption o) =>
+    o.preset?.reasoning ?? false;
+
+enum ModelSort { standard, name, price }
+
+double _modelPrice(ModelOption o) {
+  final p = o.preset;
+  if (p == null) return double.infinity;
+  return (p.inputCost?.toDouble() ?? double.infinity) +
+      (p.outputCost?.toDouble() ?? double.infinity);
+}
+
+/// Vergleicht zwei Optionen; Standard lässt die Katalogreihenfolge.
+int compareModelOptions(ModelOption a, ModelOption b, ModelSort sort) {
+  return switch (sort) {
+    .standard => 0,
+    .name => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+    .price => _modelPrice(a).compareTo(_modelPrice(b)),
+  };
+}
+
+class _SortMenu extends StatelessWidget {
+  final ModelSort value;
+  final ValueChanged<ModelSort> onChanged;
+
+  const _SortMenu({required this.value, required this.onChanged});
+
+  String _label(ModelSort sort, Translations l10n) => switch (sort) {
+    .standard => l10n.assistant.modelSortStandard,
+    .name => l10n.assistant.modelSortName,
+    .price => l10n.assistant.modelSortPrice,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return MMenuButton<ModelSort>(
+      entries: [
+        for (final sort in ModelSort.values)
+          MMenuEntry(value: sort, label: _label(sort, l10n)),
+      ],
+      selected: value,
+      onSelected: onChanged,
+      tooltip: l10n.assistant.modelSortLabel,
+      child: Padding(
+        padding: const .symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: .min,
+          children: [
+            Text(
+              '${l10n.assistant.modelSortLabel}: ${_label(value, l10n)}',
+              style: context.theme.typography.labelMedium.primary,
+            ),
+            const SizedBox(width: 4),
+            const Icon(LucideIcons.chevronDown, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Future<String?> showModelPicker(
   BuildContext context, {
   required String providerName,
@@ -94,6 +164,7 @@ typedef _Row = ({
   bool hasKey,
   ModelOption? option,
   bool missing,
+  bool collapsed,
 });
 
 class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
@@ -106,6 +177,10 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
   late String _modelId = widget.modelId;
   late String? _level = widget.level;
   String _query = '';
+  bool _freeOnly = false;
+  bool _reasoningOnly = false;
+  ModelSort _sort = .standard;
+  final Set<String> _collapsed = {};
   bool _downloading = false;
   String? _downloadError;
 
@@ -147,12 +222,25 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
     return null;
   }
 
+  bool _filtering(String q) =>
+      q.isNotEmpty || _freeOnly || _reasoningOnly;
+
+  void _toggleGroup(String providerId) {
+    setState(() {
+      if (!_collapsed.remove(providerId)) {
+        _collapsed.add(providerId);
+      }
+    });
+  }
+
   List<_Row> get _rows {
     final q = _query.trim().toLowerCase();
     bool matches(ModelOption o) =>
-        q.isEmpty ||
-        o.id.toLowerCase().contains(q) ||
-        o.label.toLowerCase().contains(q);
+        (q.isEmpty ||
+            o.id.toLowerCase().contains(q) ||
+            o.label.toLowerCase().contains(q)) &&
+        (!_freeOnly || modelIsFree(o)) &&
+        (!_reasoningOnly || modelSupportsReasoning(o));
     final rows = <_Row>[];
     for (final g in _groups) {
       final isCurrentProvider = g.provider.id == widget.providerId;
@@ -160,6 +248,10 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
         for (final o in g.options)
           if (matches(o)) o,
       ];
+      // Standard behält die Katalogreihenfolge (List.sort ist nicht stabil).
+      if (_sort != .standard) {
+        matched.sort((a, b) => compareModelOptions(a, b, _sort));
+      }
       final pinnedMissing =
           isCurrentProvider &&
           widget.modelId.isNotEmpty &&
@@ -172,13 +264,19 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
               levels: const [],
             ),
           );
-      if (matched.isEmpty && !pinnedMissing && q.isNotEmpty) continue;
+      if (matched.isEmpty && !pinnedMissing && _filtering(q)) continue;
+      // Bei Suche/Filter immer aufklappen, sonst gespeicherten Zustand nehmen.
+      final collapsed = _filtering(q) ? false : _collapsed.contains(
+        g.provider.id,
+      );
       rows.add((
         provider: g.provider,
         hasKey: g.hasKey,
         option: null,
         missing: false,
+        collapsed: collapsed,
       ));
+      if (collapsed) continue;
       if (pinnedMissing) {
         rows.add((
           provider: g.provider,
@@ -190,6 +288,7 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
             levels: const [],
           ),
           missing: true,
+          collapsed: false,
         ));
       }
       for (final o in matched) {
@@ -198,6 +297,7 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
           hasKey: g.hasKey,
           option: o,
           missing: false,
+          collapsed: false,
         ));
       }
     }
@@ -274,6 +374,28 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
+          Padding(
+            padding: const .only(bottom: 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                FilterChip(
+                  label: Text(l10n.assistant.modelFilterFree),
+                  selected: _freeOnly,
+                  onSelected: (v) => setState(() => _freeOnly = v),
+                ),
+                FilterChip(
+                  label: Text(l10n.assistant.modelFilterReasoning),
+                  selected: _reasoningOnly,
+                  onSelected: (v) => setState(() => _reasoningOnly = v),
+                ),
+                _SortMenu(
+                  value: _sort,
+                  onChanged: (v) => setState(() => _sort = v),
+                ),
+              ],
+            ),
+          ),
           if (_catalogMissing)
             _CatalogRow(
               busy: _downloading,
@@ -328,6 +450,8 @@ class _GlobalModelPickerBodyState extends State<_GlobalModelPickerBody> {
                           _ProviderHeader(
                             provider: row.provider,
                             hasKey: row.hasKey,
+                            collapsed: row.collapsed,
+                            onToggle: () => _toggleGroup(row.provider.id),
                             empty: _groups
                                 .firstWhere(
                                   (g) => g.provider.id == row.provider.id,
@@ -454,12 +578,16 @@ class _ProviderHeader extends StatelessWidget {
   final LlmProvider provider;
   final bool hasKey;
   final bool empty;
+  final bool collapsed;
+  final VoidCallback onToggle;
   final VoidCallback onFillKey;
 
   const _ProviderHeader({
     required this.provider,
     required this.hasKey,
     required this.empty,
+    required this.collapsed,
+    required this.onToggle,
     required this.onFillKey,
   });
 
@@ -509,6 +637,15 @@ class _ProviderHeader extends StatelessWidget {
               ),
             ),
           ],
+          const Spacer(),
+          IconButton(
+            tooltip: provider.name,
+            icon: Icon(
+              collapsed ? LucideIcons.chevronDown : LucideIcons.chevronUp,
+              size: 18,
+            ),
+            onPressed: onToggle,
+          ),
         ],
       ),
     );
@@ -607,6 +744,9 @@ class _ModelPickerBody extends StatefulWidget {
 class _ModelPickerBodyState extends State<_ModelPickerBody> {
   final _search = TextEditingController();
   String _query = '';
+  bool _freeOnly = false;
+  bool _reasoningOnly = false;
+  ModelSort _sort = .standard;
 
   @override
   void dispose() {
@@ -616,12 +756,19 @@ class _ModelPickerBodyState extends State<_ModelPickerBody> {
 
   List<ModelOption> get _visible {
     final q = _query.trim().toLowerCase();
-    if (q.isEmpty) return widget.options;
-    return [
+    final visible = [
       for (final o in widget.options)
-        if (o.id.toLowerCase().contains(q) || o.label.toLowerCase().contains(q))
+        if ((q.isEmpty ||
+                o.id.toLowerCase().contains(q) ||
+                o.label.toLowerCase().contains(q)) &&
+            (!_freeOnly || modelIsFree(o)) &&
+            (!_reasoningOnly || modelSupportsReasoning(o)))
           o,
     ];
+    if (_sort != .standard) {
+      visible.sort((a, b) => compareModelOptions(a, b, _sort));
+    }
+    return visible;
   }
 
   @override
@@ -648,6 +795,28 @@ class _ModelPickerBodyState extends State<_ModelPickerBody> {
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
+          Padding(
+            padding: const .only(bottom: 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                FilterChip(
+                  label: Text(l10n.assistant.modelFilterFree),
+                  selected: _freeOnly,
+                  onSelected: (v) => setState(() => _freeOnly = v),
+                ),
+                FilterChip(
+                  label: Text(l10n.assistant.modelFilterReasoning),
+                  selected: _reasoningOnly,
+                  onSelected: (v) => setState(() => _reasoningOnly = v),
+                ),
+                _SortMenu(
+                  value: _sort,
+                  onChanged: (v) => setState(() => _sort = v),
+                ),
+              ],
+            ),
+          ),
           ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.sizeOf(context).height * 0.62,

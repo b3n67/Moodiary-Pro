@@ -419,15 +419,22 @@ void main() {
       final http = _StubHttp(() => throw StateError('不该走到网络'));
       final repo = LlmPresetRepository(http);
       final presets = await repo.load();
-      expect(presets.single.id, 'anthropic');
+      expect(
+        presets.where((p) => p.id == 'anthropic'),
+        hasLength(1),
+      );
       expect(http.calls, 0);
     });
 
-    test('缓存为空时 load 把网络错误透出去', () async {
-      final repo = LlmPresetRepository(
-        _StubHttp(() => throw const HttpException(.timeout, 'slow')),
+    test('缓存为空时 load liefert gebündelte Vorlagen ohne Netz', () async {
+      final http = _StubHttp(() => throw StateError('不该走到网络'));
+      final repo = LlmPresetRepository(http);
+      final presets = await repo.load();
+      expect(
+        {for (final p in presets) p.id},
+        containsAll(['mistral', 'commandcode']),
       );
-      await expectLater(repo.load(), throwsA(isA<HttpException>()));
+      expect(http.calls, 0);
     });
 
     test('在途的刷新会被合并成一次请求', () async {
@@ -435,8 +442,9 @@ void main() {
       final repo = LlmPresetRepository(http);
       final results = await Future.wait([repo.refresh(), repo.refresh()]);
       expect(http.calls, 1);
-      expect(results.first.single.id, 'anthropic');
-      expect(results.last.single.id, 'anthropic');
+      for (final r in results) {
+        expect(r.where((p) => p.id == 'anthropic'), hasLength(1));
+      }
       await repo.refresh();
       expect(http.calls, 2);
     });

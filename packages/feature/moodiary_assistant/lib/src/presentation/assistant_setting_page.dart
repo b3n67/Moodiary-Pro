@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:gap/gap.dart';
 import 'package:moodiary_assistant/src/data/assistant_defs.dart';
 import 'package:moodiary_assistant/src/data/llm_provider_repository.dart';
+import 'package:moodiary_assistant/src/data/prompt_preset_repository.dart';
 import 'package:moodiary_assistant/src/presentation/assistant_tool_ui.dart';
 import 'package:moodiary_assistant/src/presentation/permission_mode_sheet.dart';
 import 'package:moodiary_components/moodiary_components.dart';
@@ -26,6 +27,7 @@ class AssistantSettingPage extends StatelessWidget {
           slivers: [
             const _ProviderSection(),
             const _PersonalSection(),
+            const _PromptSection(),
             const _ToolSection(),
             SliverGap(context.safeBottom),
           ],
@@ -157,8 +159,222 @@ class _PersonalSectionState extends State<_PersonalSection> {
   }
 }
 
-class _ToolSection extends StatefulWidget {
-  const _ToolSection();
+class _PromptSection extends StatefulWidget {
+  const _PromptSection();
+
+  @override
+  State<_PromptSection> createState() => _PromptSectionState();
+}
+
+class _PromptSectionState extends State<_PromptSection> {
+  final _repo = PromptPresetRepository();
+
+  List<PromptPreset> _presets = const [];
+  String _activeId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  void _reload() async {
+    await _repo.ensureSeeded();
+    if (!mounted) return;
+    setState(() {
+      _presets = _repo.getAll();
+      _activeId = _repo.activeId();
+    });
+  }
+
+  Future<void> _edit([PromptPreset? preset]) async {
+    final saved = await MSheet.show<bool>(
+      context,
+      builder: (_) => _PromptEditSheet(preset: preset),
+    );
+    if (saved == true && mounted) _reload();
+  }
+
+  Future<void> _delete(PromptPreset preset) async {
+    final l10n = context.l10n;
+    final confirmed = await MAlert.confirm(
+      context,
+      title: l10n.assistant.promptDeleteTitle,
+      message: l10n.assistant.promptDeleteMessage(name: preset.name),
+      confirmLabel: l10n.common.delete,
+      isDestructive: true,
+    );
+    if (!confirmed) return;
+    await _repo.remove(preset.id);
+    if (mounted) _reload();
+  }
+
+  Future<void> _activate(String id) async {
+    await _repo.setActiveId(id);
+    if (mounted) _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return MSliverSettingGroup(
+      title: l10n.assistant.promptSectionTitle,
+      children: [
+        SettingListTile(
+          title: l10n.assistant.presetFactoryName,
+          subtitle: l10n.assistant.presetFactoryDesc,
+          leading: Switch(
+            value: _activeId.isEmpty,
+            onChanged: (v) {
+              if (v) _activate('');
+            },
+          ),
+          trailing: Text(
+            l10n.assistant.presetBuiltIn,
+            style: context.theme.typography.labelSmall.onSurfaceVariant,
+          ),
+          onTap: () => _activate(''),
+        ),
+        if (_presets.isEmpty)
+          SettingListTile(
+            title: l10n.assistant.promptEmpty,
+            leading: const Icon(LucideIcons.messagesSquare),
+            trailing: const Icon(LucideIcons.plus),
+            onTap: () => _edit(),
+          )
+        else
+          for (final preset in _presets)
+            SettingListTile(
+              title: preset.name,
+              subtitle: Text(
+                preset.content.split('\n').first,
+                maxLines: 1,
+                overflow: .ellipsis,
+              ),
+              leading: Switch(
+                value: _activeId == preset.id,
+                onChanged: (v) {
+                  if (v) _activate(preset.id);
+                },
+              ),
+              trailing: Row(
+                mainAxisSize: .min,
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.pencil),
+                    onPressed: () => _edit(preset),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.trash2),
+                    onPressed: () => _delete(preset),
+                  ),
+                ],
+              ),
+              onTap: () => _edit(preset),
+            ),
+        SettingListTile(
+          title: l10n.assistant.promptAdd,
+          leading: const Icon(LucideIcons.plus),
+          trailing: const Icon(LucideIcons.chevronRight),
+          onTap: () => _edit(),
+        ),
+      ],
+    );
+  }
+}
+
+class _PromptEditSheet extends StatefulWidget {
+  final PromptPreset? preset;
+
+  const _PromptEditSheet({this.preset});
+
+  @override
+  State<_PromptEditSheet> createState() => _PromptEditSheetState();
+}
+
+class _PromptEditSheetState extends State<_PromptEditSheet> {
+  late final TextEditingController _nameCtl;
+  late final TextEditingController _contentCtl;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtl = TextEditingController(text: widget.preset?.name ?? '');
+    _contentCtl = TextEditingController(text: widget.preset?.content ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameCtl.dispose();
+    _contentCtl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final name = _nameCtl.text.trim();
+    final content = _contentCtl.text.trim();
+    if (name.isEmpty || content.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await PromptPresetRepository().upsert(
+        id: widget.preset?.id,
+        name: name,
+        content: content,
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return MSheetScaffold<bool>(
+      title: widget.preset == null
+          ? l10n.assistant.promptAdd
+          : l10n.assistant.promptEdit,
+      icon: LucideIcons.messagesSquare,
+      actions: [
+        MAction(label: l10n.common.cancel, value: false, enabled: !_saving),
+        MAction(
+          label: l10n.common.save,
+          isPrimary: true,
+          busy: _saving,
+          enabled: !_saving,
+          onPressed: _save,
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: .stretch,
+        mainAxisSize: .min,
+        spacing: 14,
+        children: [
+          MField(
+            controller: _nameCtl,
+            label: l10n.assistant.promptNameLabel,
+            hintText: l10n.assistant.promptNameHint,
+            enabled: !_saving,
+            textInputAction: .next,
+          ),
+          MField(
+            controller: _contentCtl,
+            label: l10n.assistant.promptContentLabel,
+            hintText: l10n.assistant.promptContentHint,
+            enabled: !_saving,
+            maxLines: 8,
+            maxLength: PromptPresetRepository.maxContentChars,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolSection extends StatefulWidget {  const _ToolSection();
 
   @override
   State<_ToolSection> createState() => _ToolSectionState();

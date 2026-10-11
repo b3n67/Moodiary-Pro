@@ -77,6 +77,9 @@ build/
 logs/
 **/logs/
 
+# Build-Hook-Nebenprodukte (Lizenzgenerierung)
+.cargo-about-output.json
+
 # ============================================
 # Environment & Secrets (never commit)
 # ============================================

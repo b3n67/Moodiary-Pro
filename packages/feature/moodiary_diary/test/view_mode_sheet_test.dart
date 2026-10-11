@@ -109,4 +109,21 @@ void main() {
 
     expect(storedSort(), DiarySort.timeDesc.number);
   });
+
+  testWidgets('日历没有排序区，确认后落盘为日历模式', (tester) async {
+    await tester.pumpWidget(host());
+    await open(tester);
+
+    await pick(tester, '日历');
+    expect(find.text('最早在前'), findsNothing);
+    expect(find.text('最晚在前'), findsNothing);
+
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    expect(
+      kv.data[MoodiaryKVs.homeViewMode.name],
+      ViewModeType.calendar.number,
+    );
+  });
 }
