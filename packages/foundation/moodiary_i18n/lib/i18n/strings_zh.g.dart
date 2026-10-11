@@ -1588,8 +1588,8 @@ class Translations$common$zh {
 	/// zh: '关闭'
 	String get close => '关闭';
 
-	/// zh: 'Moodiary+'
-	String get appName => 'Moodiary+';
+	/// zh: 'Moodiary-Pro'
+	String get appName => 'Moodiary-Pro';
 
 	/// zh: '已配置'
 	String get configured => '已配置';

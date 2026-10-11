@@ -1,54 +1,50 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="res/social_dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="res/social_light.svg">
-  <img alt="moodiary" src="res/social_light.svg">
-</picture>
+# Moodiary-Pro
 
-<p align="center"><a href="README.zh.md">简体中文</a> | English</p>
+Deutsche Community-Version von [Moodiary](https://github.com/ZhuJHua/moodiary)
+(Branch `develop`) – mit OneDrive-Sync und Komfortfunktionen. Alle Änderungen
+stehen in [CHANGELOG-Moodiary.md](./CHANGELOG-Moodiary.md) (liegt auch jedem
+Release bei).
 
-<p align="center"><a href="https://docs.moodiary.net" target="_blank">Docs</a>丨<a href="https://answer.moodiary.net" target="_blank">Forum</a>丨QQ group: <a target="_blank" href="https://qm.qq.com/cgi-bin/qm/qr?k=xGr0TNp_X1z3XEn09_iE_iGSLolQwl6Y&jump_from=webapi&authKey=ZmSb2oEd94FSXxBXRBq53hgTjjvcfmgkQrduB3uL12XtRylPmRlO2OdFz6R25tIo">760014526</a>丨Telegram: <a target="_blank" href="https://t.me/openmoodiary">openmoodiary</a></p>
+## Was ist anders als im Original?
 
-<div align="center">
-  <img src="https://img.shields.io/badge/Flutter-3.47.2-blue?style=for-the-badge">
-  <img src="https://img.shields.io/github/repo-size/ZhuJHua/moodiary?style=for-the-badge&color=ff7070">
-  <img src="https://img.shields.io/github/stars/ZhuJHua/moodiary?style=for-the-badge&color=965f8a">
-  <img src="https://img.shields.io/github/v/release/ZhuJHua/moodiary?style=for-the-badge&color=4f5e7f">
-  <img src="https://img.shields.io/github/license/ZhuJHua/moodiary?style=for-the-badge&color=4ac6b7">
-</div>
+- **Deutsch**: komplette Oberfläche, Editor und Einstellungen (Du-Form)
+- **OneDrive** als Cloud-Sync neben WebDAV/S3/LAN (Anmeldung per
+  Microsoft-Browserfenster; eigene Azure-Client-ID eintragbar)
+- **Assistent**: Prompt-Presets mit 4 Vorlagen, KI-Anbieter-Vorlagen
+  (CommandCode, Mistral), Modell-Filter (gratis/Reasoning), Sortierung,
+  einklappbare Anbieter, Chat umbenennen, Zeilenumbruch, Chat-Bilder in Einträgen
+- **Backup**: alle Einstellungen inkl. Chats (ohne Datei-Dopplung)
+- **Anzeige**: Wochenbeginn Mo/So, Kalender-Ansicht, AMOLED-Schwarz
 
-## ✨ Features
+## Installieren
 
-- **Rich text**: insert images, audio and video.
-- **Search and categories**: full-text search and per-category filtering.
-- **Themes and fonts**: light and dark modes, several color schemes, and imported fonts including variable fonts.
-- **App lock**: a password with biometric unlock.
-- **Export, import and share**: export to Markdown, Word, PDF or a long image, and import from a Markdown zip or a local backup.
-- **Backup and sync**: WebDAV, S3 / MinIO and LAN sync, with optional end-to-end encryption.
-- **Weather and places**: pick or fetch the weather, save places and reference them from entries, and view your footprints on a map.
-- **Assistant**: connect any OpenAI- or Anthropic-compatible provider for chat and diary tools.
+Fertige APKs gibt es unter
+[Releases](https://github.com/b3n67/Moodiary-Pro/releases).
+Hinweis: andere Signatur als die Store-Version – diese vorher
+deinstallieren (Tagebücher vorher sichern!).
 
-## 🚀 Getting started
+## Selbst bauen
 
-Download an installer from [Releases](https://github.com/ZhuJHua/moodiary/releases). The app works offline out of the box.
+Flutter 3.47.2, Android SDK + NDK, Rust mit Android-Targets, `cargo-about`,
+Node + pnpm. Beispiel (Windows, `arm64-v8a`):
 
-Everything else is in the docs at [docs.moodiary.net](https://docs.moodiary.net).
+```powershell
+cd mobile
+flutter build apk --release
+```
 
-## 🤝 Contributors
+Eigene OneDrive-Client-ID einbetten:
 
-<a href="https://github.com/ZhuJHua/moodiary/graphs/contributors">
-  <img alt="Contributors" src="https://contrib.rocks/image?repo=ZhuJHua/moodiary">
-</a>
+```powershell
+flutter build apk --release --dart-define=ONEDRIVE_CLIENT_ID=<id>
+```
 
-## 🥪 Sponsor
+Ohne die Define bleibt das Feld in den OneDrive-Einstellungen leer und jede
+Nutzerin trägt ihre eigene ID ein.
 
-If Moodiary is useful to you, you can buy me a sandwich.
+## Dank
 
-<img src="mobile/res/sponsor/wechat.jpg" style="width:300px" alt="Sponsor"/>
-
-### Sponsors
-
-To be listed, leave your GitHub username or a nickname in the note of your donation. A nickname must comply with applicable laws, or it will not be shown.
-
-<!-- sponsors:start -->
-朱东杰, [dsxksss](https://github.com/dsxksss), 不对味的雪碧, [xiaoxianzi-99](https://github.com/xiaoxianzi-99), Lucci, [Higanoneko](https://github.com/Higanoneko), h, 大作文
-<!-- sponsors:end -->
+Alle Lorbeeren für die App gehen an
+[ZhuJHua](https://github.com/ZhuJHua/moodiary) und die Community dort.
+Verbesserungen aus diesem Fork werden als Pull-Requests zurück angeboten.
+Es gilt die [LICENSE](./LICENSE) des Originals.

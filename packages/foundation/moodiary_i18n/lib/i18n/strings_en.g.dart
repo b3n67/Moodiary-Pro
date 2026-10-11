@@ -577,7 +577,7 @@ class _Translations$common$en extends Translations$common$zh {
 	@override String categoryCount({required Object count}) => '${count} categories';
 	@override String get fileName => 'File name';
 	@override String get close => 'Close';
-	@override String get appName => 'Moodiary+';
+	@override String get appName => 'Moodiary-Pro';
 	@override String get configured => 'Configured';
 	@override String get notConfigured => 'Not configured';
 	@override String get copied => 'Copied to clipboard';
