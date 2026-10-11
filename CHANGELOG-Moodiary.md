@@ -16,7 +16,7 @@ Signatur, Update ohne Deinstallation möglich).
   Start automatisch in der Schriften-Verwaltung (und im PDF-Export);
   Arial/Times selbst sind proprietär und liegen nicht bei
 
-## Aktuell: Moodiary-25-20261011 (2.8.1+100)
+## Moodiary-25-20261011 (2.8.1+100)
 
 **Neu in dieser Version:**
 - Review-Härtung: Backup-Restore bricht bei kaputten Einträgen nicht mehr ab,
@@ -36,7 +36,7 @@ Signatur, Update ohne Deinstallation möglich).
 - KI-Anbieter-Vorlagen: **CommandCode** (16 Modelle aus der offiziellen Doku,
   inkl. 3 Gratis-Modelle) und **Mistral** (4 Modelle)
 
-## Aktuell: Moodiary-18-20261009 (2.8.1+98)
+## Moodiary-18-20261009 (2.8.1+98)
 
 **Neu in dieser Version:**
 - KI-Anbieter-Vorlagen: **CommandCode** (16 Modelle aus der offiziellen
