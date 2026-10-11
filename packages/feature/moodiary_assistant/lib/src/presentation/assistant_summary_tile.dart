@@ -17,6 +17,7 @@ class AssistantSummaryTile extends StatefulWidget {
 class _AssistantSummaryTileState extends State<AssistantSummaryTile> {
   LlmProvider? _active;
   bool _keyConfigured = false;
+  bool _keyless = false;
   bool _loaded = false;
   StreamSubscription<void>? _sub;
 
@@ -41,6 +42,7 @@ class _AssistantSummaryTileState extends State<AssistantSummaryTile> {
     if (!mounted) return;
     setState(() {
       _active = active;
+      _keyless = active?.isKeyless ?? false;
       _keyConfigured = key != null && key.isNotEmpty;
       _loaded = true;
     });
@@ -53,6 +55,8 @@ class _AssistantSummaryTileState extends State<AssistantSummaryTile> {
         ? context.l10n.assistant.summaryLoading
         : active == null
         ? context.l10n.assistant.summaryNoProvider
+        : _keyless
+        ? '${active.name} · ${active.defaultModel}'
         : '${active.name} · ${active.defaultModel} · '
               '${_keyConfigured ? context.l10n.assistant.summaryKeySet : context.l10n.assistant.summaryKeyUnset}';
     return SettingListTile(

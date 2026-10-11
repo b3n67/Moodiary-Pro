@@ -65,6 +65,7 @@ class SessionTitleController {
       type: route.protocol,
       baseUrl: route.baseUrl,
       apiKey: apiKey,
+      keyless: provider.isKeyless,
       model: route.modelId,
       systemPrompt: buildTitleSystemPrompt(),
       maxTokens: assistantTitleMaxOutputTokens,

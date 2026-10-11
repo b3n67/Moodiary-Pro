@@ -24,6 +24,9 @@ const _officialEndpointNpm = {
 
 @freezed
 abstract class LlmProviderPreset with _$LlmProviderPreset {
+  /// Vorlagen-IDs, die ohne API-Key funktionieren (Gratis-Endpunkte).
+  static const keylessPresetIds = <String>{'pollinations'};
+
   const factory LlmProviderPreset({
     required String id,
     required String name,

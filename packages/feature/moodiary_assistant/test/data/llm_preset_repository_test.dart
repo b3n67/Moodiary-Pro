@@ -432,9 +432,22 @@ void main() {
       final presets = await repo.load();
       expect(
         {for (final p in presets) p.id},
-        containsAll(['mistral', 'commandcode']),
+        containsAll(['mistral', 'commandcode', 'pollinations']),
       );
       expect(http.calls, 0);
+    });
+
+    test('Pollinations ist keyless gebündelt (ohne Tools/Reasoning)', () {
+      final presets = LlmPresetRepository.withBundled(const []);
+      final pollinations = presets.singleWhere((p) => p.id == 'pollinations');
+      expect(
+        LlmProviderPreset.keylessPresetIds,
+        contains(pollinations.id),
+      );
+      final model = pollinations.models.single;
+      expect(model.toolCall, isFalse);
+      expect(model.reasoning, isFalse);
+      expect(model.protocol, AssistantProviderType.openaiCompletions);
     });
 
     test('在途的刷新会被合并成一次请求', () async {

@@ -84,6 +84,8 @@ class LlmPresetRepository {
   static const String _commandCodeBase =
       'https://api.commandcode.ai/provider/v1';
 
+  static const String _pollinationsBase = 'https://text.pollinations.ai/openai';
+
   static final List<LlmProviderPreset> _bundled = [
     LlmProviderPreset(
       id: 'mistral',
@@ -162,14 +164,45 @@ class LlmPresetRepository {
           ),
       ],
     ),
+    const LlmProviderPreset(
+      // Gratis-Start ohne API-Key: Pollinations braucht keine
+      // Registrierung (OpenAI-kompatibel, ohne Tools, ohne Reasoning).
+      id: 'pollinations',
+      name: 'Pollinations (gratis, ohne Key)',
+      docUrl: 'https://github.com/pollinations/pollinations',
+      env: [],
+      logoUrl: 'https://models.dev/logos/pollinations.svg',
+      models: [
+        LlmModelPreset(
+          id: 'openai',
+          name: 'Pollinations Standard',
+          protocol: AssistantProviderType.openaiCompletions,
+          baseUrl: _pollinationsBase,
+          inputCost: 0,
+          outputCost: 0,
+        ),
+      ],
+    ),
   ];
 }
 
 List<LlmProviderPreset> _withBundled(List<LlmProviderPreset> list) {
-  final ids = {for (final p in list) p.id};
-  if (ids.contains('mistral') && ids.contains('commandcode')) return list;
+  // Keyless-Vorlagen kommen immer gebündelt: Ein Remote-Eintrag mit
+  // derselben ID könnte Protokoll/Tools unkontrolliert ändern.
+  final kept = [
+    for (final p in list)
+      if (!LlmProviderPreset.keylessPresetIds.contains(p.id)) p,
+  ];
+  final ids = {for (final p in kept) p.id};
+  if (ids.contains('mistral') && ids.contains('commandcode')) {
+    return [
+      ...kept,
+      for (final b in LlmPresetRepository._bundled)
+        if (LlmProviderPreset.keylessPresetIds.contains(b.id)) b,
+    ];
+  }
   return [
-    ...list,
+    ...kept,
     for (final b in LlmPresetRepository._bundled)
       if (!ids.contains(b.id)) b,
   ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));

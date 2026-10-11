@@ -47,6 +47,10 @@ class _AssistantProviderListPageState extends State<AssistantProviderListPage> {
     final providers = await _repo.getAllProviders();
     final withKey = <String>{};
     for (final p in providers) {
+      if (p.isKeyless) {
+        withKey.add(p.id);
+        continue;
+      }
       final key = await _repo.getKey(p.id);
       if (key != null && key.isNotEmpty) withKey.add(p.id);
     }

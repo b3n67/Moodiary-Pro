@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:moodiary_utils/moodiary_utils.dart';
 
 import 'assistant_provider_type.dart';
+import 'llm_provider_preset.dart';
 
 part 'llm_provider.freezed.dart';
 part 'llm_provider.g.dart';
@@ -68,6 +69,10 @@ abstract class LlmProvider with _$LlmProvider {
       _$LlmProviderFromJson(json);
 
   bool get isPreset => presetId.isNotEmpty;
+
+  /// Keyless-Vorlage (Gratis-Endpunkt ohne API-Key, z. B. Pollinations).
+  bool get isKeyless =>
+      isPreset && LlmProviderPreset.keylessPresetIds.contains(presetId);
 
   AssistantProviderType get protocol => .fromId(type);
 }

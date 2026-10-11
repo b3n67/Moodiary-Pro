@@ -109,6 +109,7 @@ class ContextCompactionController {
       type: route.protocol,
       baseUrl: route.baseUrl,
       apiKey: apiKey,
+      keyless: provider.isKeyless,
       model: route.modelId,
       systemPrompt: buildCompactionSystemPrompt(),
       maxTokens: assistantCompactionSummaryMaxTokens,

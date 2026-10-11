@@ -120,6 +120,33 @@ class LlmProviderRepository {
       if (active != null) return active;
     }
     final all = await getAllProviders();
-    return all.isEmpty ? null : all.first;
+    if (all.isNotEmpty) return all.first;
+    return ensureDefaultProvider();
+  }
+
+  /// Legt beim ersten Start den Gratis-Provider an (kein Key nötig),
+  /// damit der Assistent sofort nutzbar ist. Nur einmal: Wer alles
+  /// löscht, meint das so und bekommt nichts zurück. Fehler degradieren
+  /// zu null (Aufrufer können ohne Provider umgehen), die Marke wird
+  /// nur bei Erfolg gesetzt (sonst gäbe es nie einen zweiten Versuch).
+  Future<LlmProvider?> ensureDefaultProvider() async {
+    if ((await getAllProviders()).isNotEmpty) return null;
+    if (MoodiaryKVs.keylessDefaultSeeded.get() ?? false) return null;
+    final provider = LlmProvider.create(
+      name: 'Pollinations (gratis, ohne Key)',
+      type: AssistantProviderType.openaiCompletions,
+      baseUrl: 'https://text.pollinations.ai/openai',
+      defaultModel: 'openai',
+      sortOrder: 0,
+      presetId: 'pollinations',
+      models: const ['openai'],
+    );
+    try {
+      await upsertProvider(provider);
+    } catch (_) {
+      return null;
+    }
+    MoodiaryKVs.keylessDefaultSeeded.set(true);
+    return provider;
   }
 }

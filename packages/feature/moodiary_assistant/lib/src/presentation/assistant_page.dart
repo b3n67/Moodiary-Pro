@@ -346,7 +346,9 @@ class _AssistantPageState extends State<AssistantPage> {
     if (mounted) {
       setState(() {
         _resolved = true;
-        _ready = provider != null && key != null && key.isNotEmpty;
+        _ready =
+            provider != null &&
+            (provider.isKeyless || (key != null && key.isNotEmpty));
         _provider = provider;
         _providerMissing = providerMissing;
         _catalogMissing = catalogMissing;
@@ -392,7 +394,7 @@ class _AssistantPageState extends State<AssistantPage> {
         (
           provider: p,
           options: ModelResolver.optionsFor(p),
-          hasKey: keys[i]?.isNotEmpty ?? false,
+          hasKey: p.isKeyless || (keys[i]?.isNotEmpty ?? false),
         ),
     ];
   }
@@ -683,7 +685,7 @@ class _AssistantPageState extends State<AssistantPage> {
     final provider = _provider;
     if (provider == null) return;
     final key = await getIt<LlmProviderRepository>().getKey(provider.id);
-    if (key == null || key.isEmpty) return;
+    if (!provider.isKeyless && (key == null || key.isEmpty)) return;
     if (!mounted || _session?.id != session.id) return;
 
     final updated = await _title.maybeTitle(
@@ -691,7 +693,7 @@ class _AssistantPageState extends State<AssistantPage> {
       firstUserText: firstUserText,
       provider: provider,
       model: _modelId,
-      apiKey: key,
+      apiKey: key ?? '',
     );
     final current = _session;
     if (updated == null || !mounted || current?.id != session.id) return;
@@ -750,12 +752,13 @@ class _AssistantPageState extends State<AssistantPage> {
     final provider = _provider;
     if (provider == null) return null;
     final key = await getIt<LlmProviderRepository>().getKey(provider.id);
-    if (key == null || key.isEmpty) return null;
+    if (!provider.isKeyless && (key == null || key.isEmpty)) return null;
     final route = ModelResolver.resolve(provider, _modelId);
     return AssistantChatRequest(
       type: route.protocol,
       baseUrl: route.baseUrl,
-      apiKey: key,
+      apiKey: key ?? '',
+      keyless: provider.isKeyless,
       model: route.modelId,
       systemPrompt: systemPrompt,
       volatilePrefix: volatilePrefix,
@@ -1096,7 +1099,7 @@ class _AssistantPageState extends State<AssistantPage> {
     final provider = _provider;
     if (provider == null) return null;
     final key = await getIt<LlmProviderRepository>().getKey(provider.id);
-    if (key == null || key.isEmpty) return null;
+    if (!provider.isKeyless && (key == null || key.isEmpty)) return null;
     if (!mounted || _session?.id != session.id) return null;
 
     final updated = await _compaction.maybeCompact(
@@ -1106,7 +1109,7 @@ class _AssistantPageState extends State<AssistantPage> {
       contextLimit: _contextLimit,
       provider: provider,
       model: _modelId,
-      apiKey: key,
+      apiKey: key ?? '',
       force: force,
     );
     final current = _session;

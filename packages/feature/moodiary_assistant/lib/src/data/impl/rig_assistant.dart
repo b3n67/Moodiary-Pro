@@ -15,7 +15,7 @@ const String _gateSkip = 'skip:';
 class RigAssistantService implements AssistantService {
   @override
   Stream<AssistantStreamEvent> chat(AssistantChatRequest request) async* {
-    if (request.apiKey.isEmpty) {
+    if (request.apiKey.isEmpty && !request.keyless) {
       throw const AssistantNotConfiguredException();
     }
 

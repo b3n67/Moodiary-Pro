@@ -89,6 +89,8 @@ enum MoodiaryKVs<T extends Object> {
 
   bundledFontSeedVersion<int>(defaultValue: 0),
 
+  keylessDefaultSeeded<bool>(defaultValue: false),
+
   assistantMemoryEnabled<bool>(defaultValue: true),
 
   llmPresetCache<String>(defaultValue: ''),

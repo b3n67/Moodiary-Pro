@@ -203,6 +203,9 @@ class AssistantChatRequest {
 
   final String apiKey;
 
+  /// Keyless Gratis-Endpunkt (z. B. Pollinations): leerer apiKey ist ok.
+  final bool keyless;
+
   final String model;
 
   final String systemPrompt;
@@ -225,6 +228,7 @@ class AssistantChatRequest {
     required this.type,
     required this.baseUrl,
     required this.apiKey,
+    this.keyless = false,
     required this.model,
     required this.systemPrompt,
     this.volatilePrefix = '',

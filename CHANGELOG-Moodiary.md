@@ -4,6 +4,12 @@ Basis: ZhuJHua/moodiary (Branch `develop`), erweitert um Deutsch,
 OneDrive-Sync und Komfortfunktionen. Installiert wird per APK (gleiche
 Signatur, Update ohne Deinstallation möglich).
 
+## Unveröffentlicht
+- Gratis-Start ohne API-Key: **Pollinations**-Vorlage (ohne Registrierung)
+  wird beim ersten Start automatisch als Assistent angelegt — Chat, Titel
+  und Zusammenfassungen sofort nutzbar (ohne Tools); eigene Provider wie
+  bisher per Key
+
 ## Aktuell: Moodiary-26-20261011 (2.8.1+101)
 - Mitgelieferte Schriften (OFL): **Arimo** (≈ Arial), **Tinos**
   (≈ Times New Roman), **Lato**, **Nunito**, **Open Sans** — beim ersten
